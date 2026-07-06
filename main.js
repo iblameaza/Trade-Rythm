@@ -4,7 +4,7 @@
  * Table view, inline editing, PnL dashboard, trade creation.
  */
 
-const { Plugin, ItemView, PluginSettingTab, Setting, Notice } = require("obsidian");
+const { Plugin, ItemView, PluginSettingTab, Setting, Notice, Modal } = require("obsidian");
 
 const VIEW_TYPE = "trade-rythm-db";
 
@@ -13,6 +13,9 @@ const DEFAULT_SETTINGS = {
   tradeFolder: "Private Github/\ufe31 Trades Journal",
   backtestFolder: "Private Github/\ufe31 Backtest Journal",
   attachmentsFolder: "attachments",
+  accounts: [],
+  models: [],
+  sessions: [],
   columns: [
     "Entry / Exit Date", "Symbol", "Model", "Direction", "Status",
     "Gross PnL", "Session", "Setup Grade", "Account", "Type of Trade",
@@ -227,6 +230,51 @@ class TradeRythmPlugin extends Plugin {
       if (l.view instanceof DatabaseView) l.view.render();
     });
   }
+
+  // ─── Account CRUD ──────────────────────────────
+  async addAccount(account) {
+    this.settings.accounts.push({ ...account, id: "acc_" + Date.now() });
+    await this.saveSettings();
+  }
+
+  async updateAccount(id, data) {
+    const idx = this.settings.accounts.findIndex((a) => a.id === id);
+    if (idx >= 0) {
+      this.settings.accounts[idx] = { ...this.settings.accounts[idx], ...data };
+      await this.saveSettings();
+    }
+  }
+
+  async deleteAccount(id) {
+    this.settings.accounts = this.settings.accounts.filter((a) => a.id !== id);
+    await this.saveSettings();
+  }
+
+  // ─── Model CRUD ────────────────────────────────
+  async addModel(name) {
+    if (!this.settings.models.includes(name)) {
+      this.settings.models.push(name);
+      await this.saveSettings();
+    }
+  }
+
+  async deleteModel(name) {
+    this.settings.models = this.settings.models.filter((m) => m !== name);
+    await this.saveSettings();
+  }
+
+  // ─── Session CRUD ──────────────────────────────
+  async addSession(name) {
+    if (!this.settings.sessions.includes(name)) {
+      this.settings.sessions.push(name);
+      await this.saveSettings();
+    }
+  }
+
+  async deleteSession(name) {
+    this.settings.sessions = this.settings.sessions.filter((s) => s !== name);
+    await this.saveSettings();
+  }
 }
 
 // ─── Database View ──────────────────────────────────────
@@ -271,8 +319,13 @@ class DatabaseView extends ItemView {
       text: "Dashboard",
       cls: "tj-tab",
     });
+    this.tabAccounts = tabBar.createEl("button", {
+      text: "Accounts",
+      cls: "tj-tab",
+    });
     this.tabTrades.addEventListener("click", () => this.switchTab("trades"));
     this.tabDashboard.addEventListener("click", () => this.switchTab("dashboard"));
+    this.tabAccounts.addEventListener("click", () => this.switchTab("accounts"));
 
     const btnBar = this.containerEl.createEl("div", { cls: "tj-btn-bar" });
     const btnNew = btnBar.createEl("button", {
@@ -308,6 +361,7 @@ class DatabaseView extends ItemView {
     this.activeTab = tab;
     this.tabTrades.toggleClass("tj-tab-active", tab === "trades");
     this.tabDashboard.toggleClass("tj-tab-active", tab === "dashboard");
+    this.tabAccounts.toggleClass("tj-tab-active", tab === "accounts");
     this.render();
   }
 
@@ -317,6 +371,8 @@ class DatabaseView extends ItemView {
 
     if (this.activeTab === "dashboard") {
       this.renderDashboard();
+    } else if (this.activeTab === "accounts") {
+      this.renderAccounts();
     } else {
       this.renderFilterBar();
       this.renderTable();
@@ -675,6 +731,99 @@ class DatabaseView extends ItemView {
     await this.app.vault.modify(file, newLines.join("\n") + "\n" + rest);
   }
 
+  renderAccounts() {
+    const accounts = this.plugin.settings.accounts || [];
+
+    const btnBar = this.contentEl.createEl("div", { cls: "tj-btn-bar" });
+    const btnAdd = btnBar.createEl("button", {
+      text: "+ New Account",
+      cls: "tj-btn tj-btn-primary",
+    });
+    btnAdd.addEventListener("click", () => {
+      new AccountModal(this.app, this.plugin, null, (acc) => {
+        this.plugin.addAccount(acc);
+      }).open();
+    });
+
+    if (accounts.length === 0) {
+      this.contentEl.createEl("p", {
+        text: "No accounts yet. Click '+ New Account' to create one.",
+        cls: "tj-td-empty",
+      });
+      return;
+    }
+
+    const wrapper = this.contentEl.createEl("div", { cls: "tj-table-wrapper" });
+    const table = wrapper.createEl("table", { cls: "tj-table tj-accounts-table" });
+    const thead = table.createEl("thead").createEl("tr");
+    thead.createEl("th", { text: "#", cls: "tj-th-num" });
+    thead.createEl("th", { text: "Name" });
+    thead.createEl("th", { text: "Initial Balance" });
+    thead.createEl("th", { text: "PnL" });
+    thead.createEl("th", { text: "Total Balance" });
+    thead.createEl("th", { text: "Currency" });
+    thead.createEl("th", { text: "Type" });
+    thead.createEl("th", { text: "Trades" });
+    thead.createEl("th", { text: "", cls: "tj-th-actions" });
+
+    const tbody = table.createEl("tbody");
+    accounts.forEach((acc, i) => {
+      const pnl = this.getAccountPnl(acc);
+      const totalBalance = (acc.initialBalance || 0) + pnl;
+      const tradeCount = this.trades.filter(
+        (t) => t.account && t.account.toLowerCase() === acc.name.toLowerCase()
+      ).length;
+
+      const row = tbody.createEl("tr");
+      row.createEl("td", { text: String(i + 1), cls: "tj-td-num" });
+      row.createEl("td", { text: acc.name });
+      row.createEl("td", {
+        text: AccountModal.formatCurrency(acc.initialBalance || 0, acc.currency || "USD"),
+      });
+      const pnlTd = row.createEl("td", {
+        text: AccountModal.formatCurrency(pnl, acc.currency || "USD"),
+      });
+      pnlTd.toggleClass("tj-pnl-positive", pnl > 0);
+      pnlTd.toggleClass("tj-pnl-negative", pnl < 0);
+      row.createEl("td", {
+        text: AccountModal.formatCurrency(totalBalance, acc.currency || "USD"),
+      });
+      row.createEl("td", { text: acc.currency || "USD" });
+      row.createEl("td", { text: acc.type || "live" });
+      row.createEl("td", { text: String(tradeCount) });
+
+      const actionsTd = row.createEl("td", { cls: "tj-td-actions" });
+      const editBtn = actionsTd.createEl("button", {
+        text: "Edit",
+        cls: "tj-btn tj-btn-sm",
+      });
+      editBtn.addEventListener("click", () => {
+        new AccountModal(this.app, this.plugin, acc, (data) => {
+          this.plugin.updateAccount(acc.id, data);
+        }).open();
+      });
+      const delBtn = actionsTd.createEl("button", {
+        text: "Del",
+        cls: "tj-btn tj-btn-sm tj-btn-danger",
+      });
+      delBtn.addEventListener("click", () => {
+        new Notice(`Account "${acc.name}" deleted`);
+        this.plugin.deleteAccount(acc.id);
+      });
+    });
+  }
+
+  getAccountPnl(acc) {
+    return this.trades
+      .filter(
+        (t) =>
+          t.account &&
+          t.account.toLowerCase() === (acc.name || "").toLowerCase() &&
+          t.status === "Closed"
+      )
+      .reduce((sum, t) => sum + (t.pnl || 0), 0);
+  }
+
   renderDashboard() {
     const trades = this.filteredTrades.filter((t) => t.status === "Closed");
     const allTrades = this.filteredTrades;
@@ -707,6 +856,7 @@ class DatabaseView extends ItemView {
     this.renderGroupBreakdown(dash, "PnL by Model", trades, "model");
     this.renderGroupBreakdown(dash, "PnL by Symbol", trades, "symbol");
     this.renderGroupBreakdown(dash, "PnL by Session", trades, "session");
+    this.renderGroupBreakdown(dash, "PnL by Account", trades, "account");
 
     const recent = [...allTrades]
       .sort((a, b) => {
@@ -791,6 +941,79 @@ class DatabaseView extends ItemView {
   }
 }
 
+// ─── Account Modal ─────────────────────────────────────
+class AccountModal extends Modal {
+  constructor(app, plugin, existing, onSave) {
+    super(app);
+    this.plugin = plugin;
+    this.existing = existing;
+    this.onSave = onSave;
+  }
+
+  static formatCurrency(val, currency) {
+    const symbols = { USD: "$", EUR: "€", GBP: "£", JPY: "¥", IDR: "Rp" };
+    const sym = symbols[currency] || currency + " ";
+    return sym + Number(val).toFixed(2);
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.addClass("tj-modal");
+
+    const isEdit = !!this.existing;
+    contentEl.createEl("h3", { text: isEdit ? "Edit Account" : "New Account" });
+
+    const nameInput = contentEl.createEl("input", {
+      cls: "tj-modal-input",
+      attr: { type: "text", placeholder: "Account name", value: this.existing?.name || "" },
+    });
+
+    const balanceInput = contentEl.createEl("input", {
+      cls: "tj-modal-input",
+      attr: { type: "number", placeholder: "Initial balance", value: this.existing?.initialBalance ?? "" },
+    });
+
+    const currencyInput = contentEl.createEl("input", {
+      cls: "tj-modal-input",
+      attr: { type: "text", placeholder: "Currency (USD, EUR, IDR...)", value: this.existing?.currency || "USD" },
+    });
+
+    const typeSelect = contentEl.createEl("select", { cls: "tj-modal-input" });
+    typeSelect.createEl("option", { text: "Live", value: "live" });
+    typeSelect.createEl("option", { text: "Demo", value: "demo" });
+    if (this.existing?.type) typeSelect.value = this.existing.type;
+
+    const btnRow = contentEl.createEl("div", { cls: "tj-modal-btns" });
+    const saveBtn = btnRow.createEl("button", {
+      text: isEdit ? "Save Changes" : "Create Account",
+      cls: "tj-btn tj-btn-primary",
+    });
+    const cancelBtn = btnRow.createEl("button", { text: "Cancel", cls: "tj-btn" });
+
+    saveBtn.addEventListener("click", () => {
+      const name = nameInput.value.trim();
+      if (!name) {
+        new Notice("Account name is required");
+        return;
+      }
+      this.onSave({
+        name,
+        initialBalance: parseFloat(balanceInput.value) || 0,
+        currency: currencyInput.value.trim().toUpperCase() || "USD",
+        type: typeSelect.value,
+      });
+      this.close();
+    });
+
+    cancelBtn.addEventListener("click", () => this.close());
+  }
+
+  onClose() {
+    this.contentEl.empty();
+  }
+}
+
 // ─── Settings Tab ───────────────────────────────────────
 class TradeRythmSettingsTab extends PluginSettingTab {
   constructor(app, plugin) {
@@ -828,6 +1051,18 @@ class TradeRythmSettingsTab extends PluginSettingTab {
           })
       );
 
+    containerEl.createEl("h3", { text: "Models" });
+    this.renderStringList(containerEl, "model", this.plugin.settings.models, {
+      add: (v) => this.plugin.addModel(v),
+      del: (v) => this.plugin.deleteModel(v),
+    });
+
+    containerEl.createEl("h3", { text: "Sessions" });
+    this.renderStringList(containerEl, "session", this.plugin.settings.sessions, {
+      add: (v) => this.plugin.addSession(v),
+      del: (v) => this.plugin.deleteSession(v),
+    });
+
     containerEl.createEl("h3", { text: "Commands" });
     const cmdDiv = containerEl.createEl("div", { cls: "tj-settings-commands" });
     cmdDiv.createEl("p", {
@@ -837,6 +1072,34 @@ class TradeRythmSettingsTab extends PluginSettingTab {
     ul.createEl("li", { text: "Trade Rythm: Open Trade Rythm" });
     ul.createEl("li", { text: "Trade Rythm: New Trade Entry" });
     ul.createEl("li", { text: "Trade Rythm: New Backtest Entry" });
+  }
+
+  renderStringList(container, label, list, actions) {
+    const div = container.createEl("div", { cls: "tj-settings-list" });
+    const addRow = div.createEl("div", { cls: "tj-settings-add-row" });
+    const input = addRow.createEl("input", {
+      cls: "tj-settings-add-input",
+      attr: { type: "text", placeholder: `Add ${label}...` },
+    });
+    const btn = addRow.createEl("button", {
+      text: "Add",
+      cls: "tj-btn tj-btn-primary",
+    });
+    btn.addEventListener("click", () => {
+      const val = input.value.trim();
+      if (val) { actions.add(val); input.value = ""; }
+    });
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") btn.click();
+    });
+
+    const listEl = div.createEl("ul", { cls: "tj-settings-list-el" });
+    list.forEach((item) => {
+      const li = listEl.createEl("li");
+      li.createEl("span", { text: item });
+      const delBtn = li.createEl("button", { text: "✕", cls: "tj-btn tj-btn-sm tj-btn-danger" });
+      delBtn.addEventListener("click", () => actions.del(item));
+    });
   }
 }
 

@@ -252,6 +252,90 @@
   padding: 3px 8px;
 }
 
+/* ── Accounts Table ────────────────────────────── */
+.tj-accounts-table .tj-th-actions {
+  width: 100px;
+  text-align: right;
+}
+.tj-td-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+.tj-btn-sm {
+  padding: 2px 8px;
+  font-size: 11px;
+}
+.tj-btn-danger {
+  color: var(--tj-negative);
+  border-color: var(--tj-negative);
+}
+.tj-btn-danger:hover {
+  background: var(--tj-negative);
+  color: #fff;
+}
+
+/* ── Account Modal ─────────────────────────────── */
+.tj-modal {
+  padding: 16px;
+}
+.tj-modal h3 {
+  margin: 0 0 12px;
+  font-size: 16px;
+}
+.tj-modal-input {
+  display: block;
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--tj-border);
+  border-radius: 4px;
+  background: var(--tj-bg);
+  color: var(--tj-text);
+  font-size: 13px;
+  box-sizing: border-box;
+}
+.tj-modal-btns {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* ── Settings: Models / Sessions lists ─────────── */
+.tj-settings-list {
+  padding: 8px 0;
+}
+.tj-settings-add-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.tj-settings-add-input {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid var(--tj-border);
+  border-radius: 4px;
+  background: var(--tj-bg);
+  color: var(--tj-text);
+  font-size: 12px;
+}
+.tj-settings-list-el {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.tj-settings-list-el li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--tj-border);
+  font-size: 13px;
+}
+.tj-settings-list-el li:last-child {
+  border-bottom: none;
+}
+
 /* ── Settings ──────────────────────────────────── */
 .tj-settings-commands {
   padding: 8px 0;
