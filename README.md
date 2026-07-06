@@ -52,4 +52,4 @@ if you found this plugin helpfull for your journey, you can give me any amount o
 
 ## License
 
-Personal, non-commercial use only. No modifications, no derivatives. Credit required.
+MIT
