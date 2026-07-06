@@ -179,12 +179,16 @@
 }
 
 /* PnL colors */
-.tj-pnl-positive {
-  color: var(--tj-positive) !important;
+.tj-pnl-positive,
+.tj-pnl-positive span,
+.tj-pnl-positive .tj-cell-value {
+  color: var(--tj-positive);
   font-weight: 500;
 }
-.tj-pnl-negative {
-  color: var(--tj-negative) !important;
+.tj-pnl-negative,
+.tj-pnl-negative span,
+.tj-pnl-negative .tj-cell-value {
+  color: var(--tj-negative);
   font-weight: 500;
 }
 
