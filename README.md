@@ -2,13 +2,9 @@
 
 Personal trading journal plugin for Obsidian.
 
-<img width="834" height="324" alt="image" src="https://github.com/user-attachments/assets/e31802cd-b4ff-41fc-9e33-760fb4448a37" />
 - **Table view** — browse all trades, sort, filter, search
 - **Inline editing** — double-click any cell to edit
 - **PnL Dashboard** — total PnL, win rate, best/worst trade, profit factor
-
-<img width="737" height="234" alt="image" src="https://github.com/user-attachments/assets/fdc93d32-ea1d-4f4d-80f9-1da34e5ce842" />
-
 - **Trade creation** — one-click new trade with full YAML template (35+ fields)
 - **Before/During/After callouts** — structured trade reflection
 - **Backtest support** — separate folder and command
