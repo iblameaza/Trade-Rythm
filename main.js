@@ -94,7 +94,11 @@ class TradeRythmPlugin extends Plugin {
     new Notice("Trade Rythm: loading...");
     console.log("Trade Rythm plugin loading...");
     await this.loadSettings();
-    await this.initSetupFolders();
+    try {
+      await this.initSetupFolders();
+    } catch (e) {
+      console.error("Trade Rythm initSetupFolders error:", e);
+    }
 
     this.addRibbonIcon("dollar-sign", "Trade Rythm", () => this.activateView());
 
@@ -256,8 +260,11 @@ class TradeRythmPlugin extends Plugin {
   }
 
   async ensureFolder(path) {
-    if (!await this.app.vault.adapter.exists(path)) {
+    try {
+      if (await this.app.vault.adapter.exists(path)) return;
       await this.app.vault.createFolder(path);
+    } catch (e) {
+      console.error(`Trade Rythm ensureFolder error for "${path}":`, e);
     }
   }
 
@@ -277,27 +284,35 @@ class TradeRythmPlugin extends Plugin {
   }
 
   async addSetupItem(category, name, extraData) {
-    const folderPath = this.getSetupFolderPath(category);
-    if (!folderPath) return;
-    await this.ensureFolder(folderPath);
-    const filePath = `${folderPath}/${name}.md`;
-    if (await this.app.vault.adapter.exists(filePath)) return;
-    let body = `---\ntype: ${category}\n`;
-    if (extraData) {
-      for (const [k, v] of Object.entries(extraData)) {
-        body += `${k}: ${v}\n`;
+    try {
+      const folderPath = this.getSetupFolderPath(category);
+      if (!folderPath) return;
+      await this.ensureFolder(folderPath);
+      const filePath = `${folderPath}/${name}.md`;
+      if (await this.app.vault.adapter.exists(filePath)) return;
+      let body = `---\ntype: ${category}\n`;
+      if (extraData) {
+        for (const [k, v] of Object.entries(extraData)) {
+          body += `${k}: ${v}\n`;
+        }
       }
+      body += "---\n";
+      await this.app.vault.create(filePath, body);
+    } catch (e) {
+      console.error(`Trade Rythm addSetupItem error (${category}/${name}):`, e);
     }
-    body += "---\n";
-    await this.app.vault.create(filePath, body);
   }
 
   async deleteSetupItem(category, name) {
-    const folderPath = this.getSetupFolderPath(category);
-    if (!folderPath) return;
-    const filePath = `${folderPath}/${name}.md`;
-    const file = this.app.vault.getAbstractFileByPath(filePath);
-    if (file) await this.app.vault.delete(file);
+    try {
+      const folderPath = this.getSetupFolderPath(category);
+      if (!folderPath) return;
+      const filePath = `${folderPath}/${name}.md`;
+      const file = this.app.vault.getAbstractFileByPath(filePath);
+      if (file) await this.app.vault.delete(file);
+    } catch (e) {
+      console.error(`Trade Rythm deleteSetupItem error (${category}/${name}):`, e);
+    }
   }
 
   async initSetupFolders() {
