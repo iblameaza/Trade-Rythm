@@ -407,6 +407,52 @@
   min-width: 80px;
 }
 
+/* ── Inline Editor Dropdown ────────────────────── */
+.tj-editor-wrapper {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+}
+.tj-dropdown-popup {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: var(--tj-bg);
+  border: 1px solid var(--tj-border);
+  border-radius: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  margin-top: 2px;
+}
+.tj-dropdown-item {
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.tj-dropdown-item:hover {
+  background: var(--tj-bg-alt);
+}
+.tj-dd-selected {
+  background: var(--tj-bg-alt);
+  font-weight: 600;
+}
+.tj-dd-check {
+  width: 16px;
+  flex-shrink: 0;
+}
+.tj-dd-done {
+  width: 100%;
+  border-radius: 0 0 4px 4px;
+  border: none;
+  border-top: 1px solid var(--tj-border);
+}
+
 /* ── Settings ──────────────────────────────────── */
 .tj-settings-commands {
   padding: 8px 0;

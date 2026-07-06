@@ -26,6 +26,7 @@ const SETUP_CATEGORIES = {
   mistakes: { label: "Mistakes", folder: "Mistakes", multi: true, defaults: [] },
   orderTypes: { label: "Order Types", folder: "Order Types", multi: false, defaults: ["Limit Order", "Market Order", "Stop Order"] },
   setupGrades: { label: "Setup Grades", folder: "Setup Grades", multi: false, defaults: ["A+", "A", "B", "C", "F"] },
+  positions: { label: "Positions", folder: "Positions", multi: false, defaults: ["Long", "Short"] },
 };
 
 const DEFAULT_SETTINGS = {
@@ -46,7 +47,7 @@ const DEFAULT_SETTINGS = {
     "Entry / Exit Date (end)", "Tradingview Chart"
   ],
   templateYaml: [
-    'Position: Buy / Sell',
+    'Position: ',
     'Symbol: ',
     'Model: ',
     'Account: ',
@@ -654,7 +655,7 @@ class DatabaseView extends ItemView {
 
         td.addEventListener("dblclick", (e) => {
           e.stopPropagation();
-          const editable = ["Entry / Exit Date", "Gross PnL", "Status", "Account", "Model", "Session", "Symbol", "Entry TimeFrame", "Entry Signal", "Setup Grade", "Type of Trade", "Order Type", "Market Conditions", "SL Management", "TP Management", "News Impact", "Confluences", "Key Levels", "Mistakes"];
+          const editable = ["Entry / Exit Date", "Gross PnL", "Status", "Account", "Model", "Session", "Symbol", "Entry TimeFrame", "Entry Signal", "Setup Grade", "Type of Trade", "Order Type", "Market Conditions", "SL Management", "TP Management", "News Impact", "Confluences", "Key Levels", "Mistakes", "Direction"];
           if (editable.includes(col)) {
             this.createInlineEditor(td, trade, col);
           }
@@ -728,6 +729,8 @@ class DatabaseView extends ItemView {
     }
   }
 
+  static YAML_KEY_MAP = { Direction: "Position" };
+
   async getSetupOptions(col) {
     const map = {
       Account: "accounts", Model: "models", Session: "sessions", Symbol: "symbols",
@@ -737,6 +740,7 @@ class DatabaseView extends ItemView {
       "Type of Trade": "typesOfTrade", "Order Type": "orderTypes",
       "Setup Grade": "setupGrades", Confluences: "confluences",
       "Key Levels": "keyLevels", Mistakes: "mistakes",
+      Direction: "positions",
     };
     const cat = map[col];
     if (!cat) return null;
@@ -749,65 +753,107 @@ class DatabaseView extends ItemView {
     return cat ? (SETUP_CATEGORIES[cat]?.multi || false) : false;
   }
 
+  yamlKey(col) {
+    return DatabaseView.YAML_KEY_MAP[col] || col;
+  }
+
   async createInlineEditor(td, trade, col) {
     const current = this.getCellValue(trade, col);
     const options = await this.getSetupOptions(col);
     const isMulti = this.isMultiColumn(col);
     td.empty();
+    td.style.position = "relative";
 
-    let input;
-    if (options && options.length > 0 && !isMulti) {
-      input = td.createEl("select", { cls: "tj-inline-editor tj-inline-select" });
-      const blank = input.createEl("option", { text: "", value: "" });
-      if (!current) blank.selected = true;
-      options.forEach((o) => {
-        const opt = input.createEl("option", { text: o.name, value: o.name });
-        if (o.name === current) opt.selected = true;
-      });
-      input.focus();
+    const selected = isMulti ? current.split(",").map((s) => s.trim()).filter(Boolean) : [];
 
-      const save = async () => {
-        const newVal = input.value ? input.value.trim() : "";
-        const fm = trade.frontmatter;
-        if (col === "Gross PnL") { fm["Gross PnL"] = parseFloat(newVal) || 0; }
-        else { fm[col] = newVal; }
-        await this.writeFrontmatter(trade.file, fm);
-        setTimeout(() => this.render(), 200);
-      };
-      input.addEventListener("change", save);
-      input.addEventListener("blur", () => { if (!input.matches(":focus")) save(); });
-      return;
-    }
-
-    const listId = "tj-list-" + Date.now();
-    input = td.createEl("input", { cls: "tj-inline-editor", attr: { type: "text", list: listId } });
+    const wrapper = td.createEl("div", { cls: "tj-editor-wrapper" });
+    const input = wrapper.createEl("input", {
+      cls: "tj-inline-editor", attr: { type: "text", placeholder: isMulti ? "Select..." : "Type or pick..." },
+    });
     input.value = current;
     input.focus();
-    input.select();
+    if (!isMulti) input.select();
 
-    if (options && options.length > 0) {
-      const dl = td.createEl("datalist", { attr: { id: listId } });
-      options.forEach((o) => dl.createEl("option", { attr: { value: o.name } }));
-    }
-
-    const save = async () => {
-      const newVal = input.value ? input.value.trim() : "";
+    const saveAndClose = async (val) => {
+      const newVal = val != null ? val : (input.value ? input.value.trim() : "");
+      const key = this.yamlKey(col);
       const fm = trade.frontmatter;
       if (col === "Gross PnL") {
         fm["Gross PnL"] = parseFloat(newVal) || 0;
       } else if (isMulti) {
-        fm[col] = newVal.split(",").map((s) => s.trim()).filter(Boolean);
+        fm[key] = newVal.split(",").map((s) => s.trim()).filter(Boolean);
       } else {
-        fm[col] = newVal;
+        fm[key] = newVal;
       }
       await this.writeFrontmatter(trade.file, fm);
-      setTimeout(() => this.render(), 200);
+      this.render();
     };
 
-    input.addEventListener("blur", save);
+    if (options && options.length > 0) {
+      const popup = wrapper.createEl("div", { cls: "tj-dropdown-popup" });
+
+      options.forEach((o) => {
+        const item = popup.createEl("div", { cls: "tj-dropdown-item" });
+        const isSel = isMulti ? selected.includes(o.name) : (o.name === current);
+        if (isMulti) {
+          item.createEl("span", { text: isSel ? "☑ " : "☐ ", cls: "tj-dd-check" });
+        }
+        item.createEl("span", { text: o.name });
+        if (isSel) item.addClass("tj-dd-selected");
+
+        item.addEventListener("mousedown", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (isMulti) {
+            const idx = selected.indexOf(o.name);
+            if (idx >= 0) selected.splice(idx, 1);
+            else selected.push(o.name);
+            const val = selected.join(", ");
+            input.value = val;
+            item.toggleClass("tj-dd-selected");
+            const cb = item.querySelector(".tj-dd-check");
+            if (cb) cb.textContent = selected.includes(o.name) ? "☑ " : "☐ ";
+          } else {
+            saveAndClose(o.name);
+          }
+        });
+      });
+
+      if (isMulti) {
+        const doneBtn = popup.createEl("button", {
+          text: "Done", cls: "tj-btn tj-btn-sm tj-btn-primary tj-dd-done",
+        });
+        doneBtn.addEventListener("mousedown", (e) => {
+          e.preventDefault();
+          saveAndClose(input.value);
+        });
+      }
+
+      input.addEventListener("input", () => {
+        const term = input.value.toLowerCase();
+        popup.querySelectorAll(".tj-dropdown-item").forEach((el) => {
+          const text = el.querySelector("span:last-child")?.textContent?.toLowerCase() || "";
+          el.style.display = text.includes(term) ? "" : "none";
+        });
+      });
+    }
+
+    const closeDropdown = () => {
+      const popup = wrapper.querySelector(".tj-dropdown-popup");
+      if (popup) popup.remove();
+    };
+
     input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") { input.blur(); }
-      if (e.key === "Escape") { this.render(); }
+      if (e.key === "Enter" && !isMulti) { saveAndClose(); }
+      if (e.key === "Escape") { closeDropdown(); this.render(); }
+    });
+
+    input.addEventListener("blur", () => {
+      setTimeout(() => {
+        if (!wrapper.contains(document.activeElement)) {
+          saveAndClose();
+        }
+      }, 200);
     });
   }
 
