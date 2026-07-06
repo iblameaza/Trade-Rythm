@@ -1,70 +1,50 @@
 # Trade Rythm
 
-A personal trading journal plugin for Obsidian. Table view, inline editing, PnL dashboard.
+Personal trading journal plugin for Obsidian.
 
----
+- **Table view** — browse all trades, sort, filter, search
+- **Inline editing** — double-click any cell to edit
+- **PnL Dashboard** — total PnL, win rate, best/worst trade, profit factor
+- **Trade creation** — one-click new trade with full YAML template (35+ fields)
+- **Before/During/After callouts** — structured trade reflection
+- **Backtest support** — separate folder and command
 
 ## How to Install
 
-**Requires [BRAT](https://obsidian.md/plugins?id=obsidian42-brat)** (Obsidian42 — BRAT).
-
-1. Install BRAT from Community Plugins
-2. BRAT Settings → "Add Beta plugin" → paste this repo's URL
-3. Enable **Trade Rythm** in Community Plugins
-
-Alternatively, copy the `trade-rythm-obsidian` folder into your vault's `.obsidian/plugins/` and add `"trade-rythm"` to `.obsidian/community-plugins.json`.
-
----
+1. Obsidian Settings → Community Plugins → Browse
+2. Search "Trade Rythm"
+3. Install & Enable
 
 ## How to Use
 
-1. Click the **$ icon** in the left ribbon, or run `Trade Rythm: Open Trade Rythm` from Command Palette (`Ctrl+P`)
-2. Click **+ New Trade** to create a trade file
-3. Fill in the YAML fields and callout sections
-4. Double-click any cell in the table to edit inline
-5. Switch to the **Dashboard** tab for PnL stats
+- Click the **$ icon** in the left ribbon, or open Command Palette (`Ctrl+P`) → `Trade Rythm: Open Trade Rythm`
+- Click **+ New Trade** to create a trade
+- Double-click any cell to edit inline
+- Switch to **Dashboard** tab for PnL stats
 
-| Command | What it does |
+### Commands
+
+| Command | Description |
 |---------|-------------|
 | `Trade Rythm: Open Trade Rythm` | Opens the table/dashboard view |
 | `Trade Rythm: New Trade Entry` | Creates a new live trade |
 | `Trade Rythm: New Backtest Entry` | Creates a new backtest trade |
-
----
 
 ## Folder Structure
 
 ```
 Your Vault/
 └── Private Github/
-    ├── ︱ Trades Journal/      ← Live trades go here
-    └── ︱ Backtest Journal/     ← Backtest trades go here
+    ├── ︱ Trades Journal/      ← Live trades
+    └── ︱ Backtest Journal/     ← Backtest trades
 ```
 
-The `︱` character is **U+FE31** — it renders as a vertical dash in Obsidian.
-
----
-
-## Features
-
-- **Table view** — browse all trades, sort by any column, filter by text
-- **Inline editing** — double-click to edit, changes save to the file
-- **PnL Dashboard** — total PnL, win rate, best/worst trade, profit factor
-- **35+ YAML fields** — matches the original Notion template
-- **Before/During/After callouts** — structured trade reflection
-- **Auto-numbering** — trades named `Trade #1.md`, `Trade #2.md`, etc.
-- **Backtest support** — separate folder and command
-
----
+The `︱` character is **U+FE31**.
 
 ## Support
 
-If this plugin helps your trading, consider buying me a coffee:
-
 ☕ [ko-fi.com/iblameaza](https://ko-fi.com/iblameaza)
-
----
 
 ## License
 
-Personal, non-commercial use only. No modifications, no derivatives. Credit required. See LICENSE file.
+Personal, non-commercial use only. No modifications, no derivatives. Credit required.
