@@ -9,13 +9,24 @@ const { Plugin, ItemView, PluginSettingTab, Setting, Notice, Modal } = require("
 const VIEW_TYPE = "trade-rythm-db";
 
 // ─── Settings ───────────────────────────────────────────
+const SETUP_CATEGORIES = {
+  accounts: { label: "Accounts", folder: "Accounts", yaml: true, defaults: [] },
+  models: { label: "Models", folder: "Models", yaml: false, defaults: [] },
+  sessions: {
+    label: "Sessions", folder: "Sessions", yaml: false,
+    defaults: ["Asian", "London Open", "London Closed", "New York", "Out of Session"]
+  },
+  symbols: { label: "Symbols", folder: "Symbols", yaml: false, defaults: [] },
+  entryTimeframes: { label: "Entry Timeframes", folder: "Entry Timeframes", yaml: false, defaults: [] },
+  confluences: { label: "Confluences", folder: "Confluences", yaml: false, defaults: [] },
+  keyLevels: { label: "Key Levels", folder: "Key Levels", yaml: false, defaults: [] },
+};
+
 const DEFAULT_SETTINGS = {
   tradeFolder: "Private Github/\ufe31 Trades Journal",
   backtestFolder: "Private Github/\ufe31 Backtest Journal",
   attachmentsFolder: "attachments",
-  accounts: [],
-  models: [],
-  sessions: [],
+  setupFolder: "Private Github/\ufe31 Trading Setup",
   columns: [
     "Entry / Exit Date", "Symbol", "Model", "Direction", "Status",
     "Gross PnL", "Session", "Setup Grade", "Account", "Type of Trade",
@@ -77,6 +88,7 @@ class TradeRythmPlugin extends Plugin {
     new Notice("Trade Rythm: loading...");
     console.log("Trade Rythm plugin loading...");
     await this.loadSettings();
+    await this.initSetupFolders();
 
     this.addRibbonIcon("dollar-sign", "Trade Rythm", () => this.activateView());
 
@@ -231,49 +243,80 @@ class TradeRythmPlugin extends Plugin {
     });
   }
 
-  // ─── Account CRUD ──────────────────────────────
-  async addAccount(account) {
-    this.settings.accounts.push({ ...account, id: "acc_" + Date.now() });
-    await this.saveSettings();
+  // ─── Setup Folder Helpers ────────────────────
+  getSetupFolderPath(category) {
+    const cfg = SETUP_CATEGORIES[category];
+    return cfg ? `${this.settings.setupFolder}/${cfg.folder}` : null;
   }
 
-  async updateAccount(id, data) {
-    const idx = this.settings.accounts.findIndex((a) => a.id === id);
-    if (idx >= 0) {
-      this.settings.accounts[idx] = { ...this.settings.accounts[idx], ...data };
-      await this.saveSettings();
+  async ensureFolder(path) {
+    if (!await this.app.vault.adapter.exists(path)) {
+      await this.app.vault.createFolder(path);
     }
   }
 
-  async deleteAccount(id) {
-    this.settings.accounts = this.settings.accounts.filter((a) => a.id !== id);
-    await this.saveSettings();
-  }
-
-  // ─── Model CRUD ────────────────────────────────
-  async addModel(name) {
-    if (!this.settings.models.includes(name)) {
-      this.settings.models.push(name);
-      await this.saveSettings();
+  async getSetupItems(category) {
+    const folderPath = this.getSetupFolderPath(category);
+    if (!folderPath) return [];
+    try {
+      const items = await this.app.vault.adapter.list(folderPath);
+      const files = items.files.filter((f) => f.endsWith(".md")).sort();
+      return files.map((f) => {
+        const name = f.split("/").pop().replace(/\.md$/i, "");
+        return { name, path: f };
+      });
+    } catch {
+      return [];
     }
   }
 
-  async deleteModel(name) {
-    this.settings.models = this.settings.models.filter((m) => m !== name);
-    await this.saveSettings();
+  async addSetupItem(category, name, extraData) {
+    const folderPath = this.getSetupFolderPath(category);
+    if (!folderPath) return;
+    await this.ensureFolder(folderPath);
+    const filePath = `${folderPath}/${name}.md`;
+    if (await this.app.vault.adapter.exists(filePath)) return;
+    let body = `---\ntype: ${category}\n`;
+    if (extraData) {
+      for (const [k, v] of Object.entries(extraData)) {
+        body += `${k}: ${v}\n`;
+      }
+    }
+    body += "---\n";
+    await this.app.vault.create(filePath, body);
   }
 
-  // ─── Session CRUD ──────────────────────────────
-  async addSession(name) {
-    if (!this.settings.sessions.includes(name)) {
-      this.settings.sessions.push(name);
-      await this.saveSettings();
+  async deleteSetupItem(category, name) {
+    const folderPath = this.getSetupFolderPath(category);
+    if (!folderPath) return;
+    const filePath = `${folderPath}/${name}.md`;
+    const file = this.app.vault.getAbstractFileByPath(filePath);
+    if (file) await this.app.vault.delete(file);
+  }
+
+  async initSetupFolders() {
+    for (const [key, cfg] of Object.entries(SETUP_CATEGORIES)) {
+      const folderPath = this.getSetupFolderPath(key);
+      await this.ensureFolder(folderPath);
+      if (cfg.defaults.length > 0) {
+        const items = await this.getSetupItems(key);
+        for (const def of cfg.defaults) {
+          if (!items.find((i) => i.name === def)) {
+            await this.addSetupItem(key, def);
+          }
+        }
+      }
     }
   }
 
-  async deleteSession(name) {
-    this.settings.sessions = this.settings.sessions.filter((s) => s !== name);
-    await this.saveSettings();
+  async readSetupFileYaml(category, name) {
+    const folderPath = this.getSetupFolderPath(category);
+    if (!folderPath) return null;
+    const filePath = `${folderPath}/${name}.md`;
+    const file = this.app.vault.getAbstractFileByPath(filePath);
+    if (!file) return null;
+    const cache = this.app.metadataCache.getFileCache(file);
+    return cache?.frontmatter || null;
   }
 }
 
@@ -319,13 +362,15 @@ class DatabaseView extends ItemView {
       text: "Dashboard",
       cls: "tj-tab",
     });
-    this.tabAccounts = tabBar.createEl("button", {
-      text: "Accounts",
+    this.btnSetup = tabBar.createEl("button", {
+      text: "Setup",
       cls: "tj-tab",
     });
     this.tabTrades.addEventListener("click", () => this.switchTab("trades"));
     this.tabDashboard.addEventListener("click", () => this.switchTab("dashboard"));
-    this.tabAccounts.addEventListener("click", () => this.switchTab("accounts"));
+    this.btnSetup.addEventListener("click", () => {
+      new SetupModal(this.app, this.plugin).open();
+    });
 
     const btnBar = this.containerEl.createEl("div", { cls: "tj-btn-bar" });
     const btnNew = btnBar.createEl("button", {
@@ -361,7 +406,6 @@ class DatabaseView extends ItemView {
     this.activeTab = tab;
     this.tabTrades.toggleClass("tj-tab-active", tab === "trades");
     this.tabDashboard.toggleClass("tj-tab-active", tab === "dashboard");
-    this.tabAccounts.toggleClass("tj-tab-active", tab === "accounts");
     this.render();
   }
 
@@ -371,8 +415,6 @@ class DatabaseView extends ItemView {
 
     if (this.activeTab === "dashboard") {
       this.renderDashboard();
-    } else if (this.activeTab === "accounts") {
-      this.renderAccounts();
     } else {
       this.renderFilterBar();
       this.renderTable();
@@ -583,7 +625,8 @@ class DatabaseView extends ItemView {
 
         td.addEventListener("dblclick", (e) => {
           e.stopPropagation();
-          if (col === "Entry / Exit Date" || col === "Gross PnL" || col === "Status") {
+          const editable = ["Entry / Exit Date", "Gross PnL", "Status", "Account", "Model", "Session", "Symbol", "Entry TimeFrame", "Setup Grade", "Type of Trade", "Order Type"];
+          if (editable.includes(col)) {
             this.createInlineEditor(td, trade, col);
           }
         });
@@ -658,35 +701,58 @@ class DatabaseView extends ItemView {
     }
   }
 
+  async getSetupOptions(col) {
+    const map = { Account: "accounts", Model: "models", Session: "sessions", Symbol: "symbols", "Entry TimeFrame": "entryTimeframes", Confluences: "confluences", "Key Levels": "keyLevels" };
+    const cat = map[col];
+    if (!cat) return null;
+    return await this.plugin.getSetupItems(cat);
+  }
+
   async createInlineEditor(td, trade, col) {
     const current = this.getCellValue(trade, col);
+    const options = await this.getSetupOptions(col);
     td.empty();
-    const input = td.createEl("input", {
-      cls: "tj-inline-editor",
-      attr: { type: "text", value: current },
-    });
+
+    let input;
+    if (options && options.length > 0) {
+      input = td.createEl("select", { cls: "tj-inline-editor tj-inline-select" });
+      const blank = input.createEl("option", { text: "", value: "" });
+      if (!current) blank.selected = true;
+      options.forEach((o) => {
+        const opt = input.createEl("option", { text: o.name, value: o.name });
+        if (o.name === current) opt.selected = true;
+      });
+    } else {
+      input = td.createEl("input", {
+        cls: "tj-inline-editor",
+        attr: { type: "text" },
+      });
+      (input).value = current;
+    }
+
     input.focus();
-    input.select();
+    if (input instanceof HTMLInputElement) input.select();
 
     const save = async () => {
-      const newVal = input.value.trim();
+      const newVal = input.value ? input.value.trim() : "";
       const fm = trade.frontmatter;
-      if (col === "Gross PnL") {
-        fm["Gross PnL"] = parseFloat(newVal) || 0;
-      } else if (col === "Status") {
-        fm["Status"] = newVal;
-      } else if (col === "Entry / Exit Date") {
-        fm["Entry / Exit Date"] = newVal;
-      }
+      const yamlKey = col;
+      fm[yamlKey] = newVal;
+      if (col === "Gross PnL") fm["Gross PnL"] = parseFloat(newVal) || 0;
       await this.writeFrontmatter(trade.file, fm);
-      this.render();
+      setTimeout(() => this.render(), 200);
     };
 
-    input.addEventListener("blur", save);
-    input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") { input.blur(); }
-      if (e.key === "Escape") { this.render(); }
-    });
+    if (input instanceof HTMLSelectElement) {
+      input.addEventListener("change", save);
+      input.addEventListener("blur", () => { if (!input.matches(":focus")) save(); });
+    } else {
+      input.addEventListener("blur", save);
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { (input).blur(); }
+        if (e.key === "Escape") { this.render(); }
+      });
+    }
   }
 
   async writeFrontmatter(file, frontmatter) {
@@ -729,99 +795,6 @@ class DatabaseView extends ItemView {
 
     const rest = lines.slice(fmEnd + 1).join("\n");
     await this.app.vault.modify(file, newLines.join("\n") + "\n" + rest);
-  }
-
-  renderAccounts() {
-    const accounts = this.plugin.settings.accounts || [];
-
-    const btnBar = this.contentEl.createEl("div", { cls: "tj-btn-bar" });
-    const btnAdd = btnBar.createEl("button", {
-      text: "+ New Account",
-      cls: "tj-btn tj-btn-primary",
-    });
-    btnAdd.addEventListener("click", () => {
-      new AccountModal(this.app, this.plugin, null, (acc) => {
-        this.plugin.addAccount(acc);
-      }).open();
-    });
-
-    if (accounts.length === 0) {
-      this.contentEl.createEl("p", {
-        text: "No accounts yet. Click '+ New Account' to create one.",
-        cls: "tj-td-empty",
-      });
-      return;
-    }
-
-    const wrapper = this.contentEl.createEl("div", { cls: "tj-table-wrapper" });
-    const table = wrapper.createEl("table", { cls: "tj-table tj-accounts-table" });
-    const thead = table.createEl("thead").createEl("tr");
-    thead.createEl("th", { text: "#", cls: "tj-th-num" });
-    thead.createEl("th", { text: "Name" });
-    thead.createEl("th", { text: "Initial Balance" });
-    thead.createEl("th", { text: "PnL" });
-    thead.createEl("th", { text: "Total Balance" });
-    thead.createEl("th", { text: "Currency" });
-    thead.createEl("th", { text: "Type" });
-    thead.createEl("th", { text: "Trades" });
-    thead.createEl("th", { text: "", cls: "tj-th-actions" });
-
-    const tbody = table.createEl("tbody");
-    accounts.forEach((acc, i) => {
-      const pnl = this.getAccountPnl(acc);
-      const totalBalance = (acc.initialBalance || 0) + pnl;
-      const tradeCount = this.trades.filter(
-        (t) => t.account && t.account.toLowerCase() === acc.name.toLowerCase()
-      ).length;
-
-      const row = tbody.createEl("tr");
-      row.createEl("td", { text: String(i + 1), cls: "tj-td-num" });
-      row.createEl("td", { text: acc.name });
-      row.createEl("td", {
-        text: AccountModal.formatCurrency(acc.initialBalance || 0, acc.currency || "USD"),
-      });
-      const pnlTd = row.createEl("td", {
-        text: AccountModal.formatCurrency(pnl, acc.currency || "USD"),
-      });
-      pnlTd.toggleClass("tj-pnl-positive", pnl > 0);
-      pnlTd.toggleClass("tj-pnl-negative", pnl < 0);
-      row.createEl("td", {
-        text: AccountModal.formatCurrency(totalBalance, acc.currency || "USD"),
-      });
-      row.createEl("td", { text: acc.currency || "USD" });
-      row.createEl("td", { text: acc.type || "live" });
-      row.createEl("td", { text: String(tradeCount) });
-
-      const actionsTd = row.createEl("td", { cls: "tj-td-actions" });
-      const editBtn = actionsTd.createEl("button", {
-        text: "Edit",
-        cls: "tj-btn tj-btn-sm",
-      });
-      editBtn.addEventListener("click", () => {
-        new AccountModal(this.app, this.plugin, acc, (data) => {
-          this.plugin.updateAccount(acc.id, data);
-        }).open();
-      });
-      const delBtn = actionsTd.createEl("button", {
-        text: "Del",
-        cls: "tj-btn tj-btn-sm tj-btn-danger",
-      });
-      delBtn.addEventListener("click", () => {
-        new Notice(`Account "${acc.name}" deleted`);
-        this.plugin.deleteAccount(acc.id);
-      });
-    });
-  }
-
-  getAccountPnl(acc) {
-    return this.trades
-      .filter(
-        (t) =>
-          t.account &&
-          t.account.toLowerCase() === (acc.name || "").toLowerCase() &&
-          t.status === "Closed"
-      )
-      .reduce((sum, t) => sum + (t.pnl || 0), 0);
   }
 
   renderDashboard() {
@@ -941,13 +914,11 @@ class DatabaseView extends ItemView {
   }
 }
 
-// ─── Account Modal ─────────────────────────────────────
-class AccountModal extends Modal {
-  constructor(app, plugin, existing, onSave) {
+// ─── Setup Modal ───────────────────────────────────────
+class SetupModal extends Modal {
+  constructor(app, plugin) {
     super(app);
     this.plugin = plugin;
-    this.existing = existing;
-    this.onSave = onSave;
   }
 
   static formatCurrency(val, currency) {
@@ -956,57 +927,94 @@ class AccountModal extends Modal {
     return sym + Number(val).toFixed(2);
   }
 
-  onOpen() {
+  async onOpen() {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.addClass("tj-modal");
+    contentEl.createEl("h2", { text: "Trading Setup" });
 
-    const isEdit = !!this.existing;
-    contentEl.createEl("h3", { text: isEdit ? "Edit Account" : "New Account" });
+    for (const [key, cfg] of Object.entries(SETUP_CATEGORIES)) {
+      const items = await this.plugin.getSetupItems(key);
+      const sec = contentEl.createEl("div", { cls: "tj-setup-section" });
+      sec.createEl("h3", { text: cfg.label });
 
-    const nameInput = contentEl.createEl("input", {
-      cls: "tj-modal-input",
-      attr: { type: "text", placeholder: "Account name", value: this.existing?.name || "" },
-    });
-
-    const balanceInput = contentEl.createEl("input", {
-      cls: "tj-modal-input",
-      attr: { type: "number", placeholder: "Initial balance", value: this.existing?.initialBalance ?? "" },
-    });
-
-    const currencyInput = contentEl.createEl("input", {
-      cls: "tj-modal-input",
-      attr: { type: "text", placeholder: "Currency (USD, EUR, IDR...)", value: this.existing?.currency || "USD" },
-    });
-
-    const typeSelect = contentEl.createEl("select", { cls: "tj-modal-input" });
-    typeSelect.createEl("option", { text: "Live", value: "live" });
-    typeSelect.createEl("option", { text: "Demo", value: "demo" });
-    if (this.existing?.type) typeSelect.value = this.existing.type;
-
-    const btnRow = contentEl.createEl("div", { cls: "tj-modal-btns" });
-    const saveBtn = btnRow.createEl("button", {
-      text: isEdit ? "Save Changes" : "Create Account",
-      cls: "tj-btn tj-btn-primary",
-    });
-    const cancelBtn = btnRow.createEl("button", { text: "Cancel", cls: "tj-btn" });
-
-    saveBtn.addEventListener("click", () => {
-      const name = nameInput.value.trim();
-      if (!name) {
-        new Notice("Account name is required");
-        return;
+      if (key === "accounts") {
+        await this.renderAccountList(sec, items);
+      } else {
+        this.renderSimpleList(sec, key, items);
       }
-      this.onSave({
-        name,
-        initialBalance: parseFloat(balanceInput.value) || 0,
-        currency: currencyInput.value.trim().toUpperCase() || "USD",
-        type: typeSelect.value,
-      });
-      this.close();
+    }
+
+    const closeBtn = contentEl.createEl("div", { cls: "tj-modal-btns" });
+    closeBtn.createEl("button", { text: "Close", cls: "tj-btn" })
+      .addEventListener("click", () => this.close());
+  }
+
+  async renderAccountList(sec, items) {
+    const addRow = sec.createEl("div", { cls: "tj-setup-add-row" });
+    const nameI = addRow.createEl("input", { cls: "tj-sm-input", attr: { type: "text", placeholder: "Name" } });
+    const balI = addRow.createEl("input", { cls: "tj-sm-input", attr: { type: "number", placeholder: "Balance" } });
+    const curI = addRow.createEl("input", { cls: "tj-sm-input tj-sm-small", attr: { type: "text", placeholder: "USD", value: "USD" } });
+    const typeS = addRow.createEl("select", { cls: "tj-sm-input tj-sm-small" });
+    typeS.createEl("option", { text: "Live", value: "live" });
+    typeS.createEl("option", { text: "Demo", value: "demo" });
+    const addBtn = addRow.createEl("button", { text: "Add", cls: "tj-btn tj-btn-sm tj-btn-primary" });
+    addBtn.addEventListener("click", async () => {
+      const name = nameI.value.trim();
+      if (!name) { new Notice("Name required"); return; }
+      await this.plugin.addSetupItem("accounts", name, { initialBalance: balI.value || "0", currency: curI.value.toUpperCase() || "USD", type: typeS.value });
+      nameI.value = ""; balI.value = ""; this.onOpen();
     });
 
-    cancelBtn.addEventListener("click", () => this.close());
+    if (items.length === 0) return;
+
+    const tbl = sec.createEl("table", { cls: "tj-table tj-setup-table" });
+    const hdr = tbl.createEl("thead").createEl("tr");
+    ["Name", "Balance", "Currency", "Type", ""].forEach((t) => hdr.createEl("th", { text: t }));
+    const bdy = tbl.createEl("tbody");
+    for (const item of items) {
+      const fm = await this.plugin.readSetupFileYaml("accounts", item.name);
+      const bal = fm?.initialBalance || "0";
+      const cur = fm?.currency || "USD";
+      const typ = fm?.type || "live";
+      const pnl = 0; // computed from trades
+      const row = bdy.createEl("tr");
+      row.createEl("td", { text: item.name });
+      row.createEl("td", { text: SetupModal.formatCurrency(parseFloat(bal), cur) });
+      row.createEl("td", { text: cur });
+      row.createEl("td", { text: typ });
+      const del = row.createEl("td").createEl("button", { text: "✕", cls: "tj-btn tj-btn-sm tj-btn-danger" });
+      del.addEventListener("click", async () => {
+        await this.plugin.deleteSetupItem("accounts", item.name);
+        this.onOpen();
+      });
+    }
+  }
+
+  renderSimpleList(sec, key, items) {
+    const addRow = sec.createEl("div", { cls: "tj-setup-add-row" });
+    const input = addRow.createEl("input", { cls: "tj-sm-input", attr: { type: "text", placeholder: `Add ${SETUP_CATEGORIES[key].label.slice(0, -1)}...` } });
+    const addBtn = addRow.createEl("button", { text: "Add", cls: "tj-btn tj-btn-sm tj-btn-primary" });
+    addBtn.addEventListener("click", async () => {
+      const name = input.value.trim();
+      if (!name) return;
+      await this.plugin.addSetupItem(key, name);
+      input.value = "";
+      this.onOpen();
+    });
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") addBtn.click(); });
+
+    if (items.length === 0) return;
+    const list = sec.createEl("ul", { cls: "tj-setup-list" });
+    items.forEach((item) => {
+      const li = list.createEl("li");
+      li.createEl("span", { text: item.name });
+      const del = li.createEl("button", { text: "✕", cls: "tj-btn tj-btn-sm tj-btn-danger" });
+      del.addEventListener("click", async () => {
+        await this.plugin.deleteSetupItem(key, item.name);
+        this.onOpen();
+      });
+    });
   }
 
   onClose() {
@@ -1051,17 +1059,18 @@ class TradeRythmSettingsTab extends PluginSettingTab {
           })
       );
 
-    containerEl.createEl("h3", { text: "Models" });
-    this.renderStringList(containerEl, "model", this.plugin.settings.models, {
-      add: (v) => this.plugin.addModel(v),
-      del: (v) => this.plugin.deleteModel(v),
-    });
-
-    containerEl.createEl("h3", { text: "Sessions" });
-    this.renderStringList(containerEl, "session", this.plugin.settings.sessions, {
-      add: (v) => this.plugin.addSession(v),
-      del: (v) => this.plugin.deleteSession(v),
-    });
+    new Setting(containerEl)
+      .setName("Setup folder")
+      .setDesc("Vault-relative path to Trading Setup (Accounts, Models, Sessions, etc.)")
+      .addText((text) =>
+        text
+          .setValue(this.plugin.settings.setupFolder)
+          .onChange(async (v) => {
+            this.plugin.settings.setupFolder = v;
+            await this.plugin.saveSettings();
+            await this.plugin.initSetupFolders();
+          })
+      );
 
     containerEl.createEl("h3", { text: "Commands" });
     const cmdDiv = containerEl.createEl("div", { cls: "tj-settings-commands" });
@@ -1074,33 +1083,6 @@ class TradeRythmSettingsTab extends PluginSettingTab {
     ul.createEl("li", { text: "Trade Rythm: New Backtest Entry" });
   }
 
-  renderStringList(container, label, list, actions) {
-    const div = container.createEl("div", { cls: "tj-settings-list" });
-    const addRow = div.createEl("div", { cls: "tj-settings-add-row" });
-    const input = addRow.createEl("input", {
-      cls: "tj-settings-add-input",
-      attr: { type: "text", placeholder: `Add ${label}...` },
-    });
-    const btn = addRow.createEl("button", {
-      text: "Add",
-      cls: "tj-btn tj-btn-primary",
-    });
-    btn.addEventListener("click", () => {
-      const val = input.value.trim();
-      if (val) { actions.add(val); input.value = ""; }
-    });
-    input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") btn.click();
-    });
-
-    const listEl = div.createEl("ul", { cls: "tj-settings-list-el" });
-    list.forEach((item) => {
-      const li = listEl.createEl("li");
-      li.createEl("span", { text: item });
-      const delBtn = li.createEl("button", { text: "✕", cls: "tj-btn tj-btn-sm tj-btn-danger" });
-      delBtn.addEventListener("click", () => actions.del(item));
-    });
-  }
 }
 
 // ─── Module Export ──────────────────────────────────────

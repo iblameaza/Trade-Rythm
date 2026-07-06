@@ -336,6 +336,72 @@
   border-bottom: none;
 }
 
+/* ── Setup Modal ──────────────────────────────── */
+.tj-setup-section {
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--tj-border);
+}
+.tj-setup-section h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.tj-setup-add-row {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.tj-sm-input {
+  padding: 3px 6px;
+  border: 1px solid var(--tj-border);
+  border-radius: 3px;
+  background: var(--tj-bg);
+  color: var(--tj-text);
+  font-size: 12px;
+  flex: 1;
+  min-width: 60px;
+}
+.tj-sm-small {
+  flex: 0 0 60px;
+}
+.tj-setup-table {
+  font-size: 12px;
+  width: 100%;
+}
+.tj-setup-table th {
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--tj-text-muted);
+  padding: 3px 6px;
+  text-align: left;
+  border-bottom: 1px solid var(--tj-border);
+}
+.tj-setup-table td {
+  padding: 3px 6px;
+  border-bottom: 1px solid var(--tj-border);
+}
+.tj-setup-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.tj-setup-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px 6px;
+  border-bottom: 1px solid var(--tj-border);
+  font-size: 12px;
+}
+.tj-setup-list li:last-child {
+  border-bottom: none;
+}
+.tj-inline-select {
+  min-width: 80px;
+}
+
 /* ── Settings ──────────────────────────────────── */
 .tj-settings-commands {
   padding: 8px 0;
