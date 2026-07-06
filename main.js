@@ -17,7 +17,7 @@ const SETUP_CATEGORIES = {
   entryTimeframes: { label: "Entry Timeframes", folder: "Entry Timeframes", multi: false, defaults: ["1 minutes", "3 minutes", "5 minutes", "15 minutes", "30 minutes", "1 Hour", "3 Hour", "4 Hour", "1 Day"] },
   confluences: { label: "Confluences", folder: "Confluences", multi: true, defaults: ["HTF Trend Alignment", "SMT Divergence with Relative", "SMT Divergence with DXY", "Entry in OTE", "Displacement", "Aligned with Seasonal", "Commercials at Net Extreme", "Open Interest Rising"] },
   keyLevels: { label: "Key Levels", folder: "Key Levels", multi: true, defaults: ["Order Block (1H)", "Order Block (4H)", "Order Block (1D)", "Liquidity Sweep", "Liquidity Vload", "Imbalance", "PDH", "OTE", "PDL", "Internal to External Liq", "External to Internal Liq", "Rejection Block (1H)", "Rejection Block (4H)", "Rejection Block (1D)"] },
-  entrySignals: { label: "Entry Signals", folder: "Entry Signals", multi: false, defaults: ["Candle Confirmation", "CSD", "Inversion-FVG"] },
+  entrySignals: { label: "Entry Signals", folder: "Entry Signals", multi: true, defaults: ["Candle Confirmation", "CSD", "Inversion-FVG"] },
   marketConditions: { label: "Market Conditions", folder: "Market Conditions", multi: false, defaults: ["Pullback in uptrend", "Pullback in downtrend", "High volatility", "Low volatility", "Strong uptrend (HTF)", "Strong uptrend (LTF)", "Strong downtrend (HTF)", "Strong downtrend (LTF)", "Sideways (HTF)", "Sideways (LTF)", "Consolidation before breakout", "Consolidation before reversal", "Slowing momentum", "News-driven spike", "Economic news impact"] },
   slManagement: { label: "SL Management", folder: "SL Management", multi: false, defaults: ["Locked Profit", "Moved to BE", "Hit Initial SL", "Hit Trailed SL", "Widened SL", "Initial SL Maintained", "Partial SL Adjustment", "Pre-News Tightening", "Delayed SL Placement", "Removed SL", "No SL"] },
   tpManagement: { label: "TP Management", folder: "TP Management", multi: false, defaults: ["Final TP Hit", "Partial 1 Taken", "Partial 2 Taken", "Partial 3 Taken", "Let Runner Go", "Pre-News Exit", "No Momentum Exit", "Manual Close (Profit)", "Manual Close (BE)", "Manual Close (Loss)", "Setup Invalidated"] },
@@ -461,7 +461,7 @@ class DatabaseView extends ItemView {
         account: fm.Account ? this.stripWiki(fm.Account) : "",
         tradeType: fm["Type of Trade"] ? this.stripWiki(fm["Type of Trade"]) : "",
         orderType: fm["Order Type"] ? this.stripWiki(fm["Order Type"]) : "",
-        entrySignal: fm["Entry Signal"] ? this.stripWiki(fm["Entry Signal"]) : "",
+        entrySignal: this.parseListStr(fm["Entry Signal"]),
         marketConditions: fm["Market Conditions"] ? this.stripWiki(fm["Market Conditions"]) : "",
         slManagement: fm["SL Management"] ? this.stripWiki(fm["SL Management"]) : "",
         tpManagement: fm["TP Management"] ? this.stripWiki(fm["TP Management"]) : "",
@@ -595,7 +595,7 @@ class DatabaseView extends ItemView {
     const tbody = table.createEl("tbody");
 
     const tr = thead.createEl("tr");
-    tr.createEl("th", { text: "#", cls: "tj-th-num" });
+    tr.createEl("th", { text: "Trade", cls: "tj-th tj-th-name" });
     cols.forEach((col) => {
       const key = this.colKey(col);
       const th = tr.createEl("th", {
@@ -619,7 +619,8 @@ class DatabaseView extends ItemView {
         this.app.workspace.getLeaf(false).openFile(trade.file);
       });
 
-      row.createEl("td", { text: String(i + 1), cls: "tj-td tj-td-num" });
+      const name = trade.file.basename.replace(/#/g, "");
+      row.createEl("td", { text: name, cls: "tj-td tj-td-name" });
 
       cols.forEach((col) => {
         const key = this.colKey(col);
@@ -652,6 +653,7 @@ class DatabaseView extends ItemView {
         attr: { colspan: String(cols.length + 1) },
         cls: "tj-td-empty",
       });
+      td.style.textAlign = "center";
       td.setText("No trades found. Click '+ New Trade' to create one.");
     }
   }
@@ -727,7 +729,7 @@ class DatabaseView extends ItemView {
   }
 
   isMultiColumn(col) {
-    const map = { Confluences: "confluences", "Key Levels": "keyLevels", Mistakes: "mistakes" };
+    const map = { Confluences: "confluences", "Key Levels": "keyLevels", Mistakes: "mistakes", "Entry Signal": "entrySignals" };
     const cat = map[col];
     return cat ? (SETUP_CATEGORIES[cat]?.multi || false) : false;
   }
