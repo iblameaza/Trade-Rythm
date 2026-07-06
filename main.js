@@ -4,6 +4,8 @@
  * Table view, inline editing, PnL dashboard, trade creation.
  */
 
+const { Plugin, ItemView, PluginSettingTab, Setting, Notice } = require("obsidian");
+
 const VIEW_TYPE = "trade-rythm-db";
 
 // ─── Settings ───────────────────────────────────────────
@@ -63,13 +65,17 @@ const DEFAULT_SETTINGS = {
 
 // ─── Plugin ─────────────────────────────────────────────
 class TradeRythmPlugin extends Plugin {
-  constructor() {
-    super();
+  constructor(app, manifest) {
+    super(app, manifest);
     this.settings = Object.assign({}, DEFAULT_SETTINGS);
   }
 
   async onload() {
+    new Notice("Trade Rythm: loading...");
+    console.log("Trade Rythm plugin loading...");
     await this.loadSettings();
+
+    this.addRibbonIcon("dollar-sign", "Trade Rythm", () => this.activateView());
 
     this.registerView(VIEW_TYPE, (leaf) => new DatabaseView(leaf, this));
 
@@ -93,12 +99,14 @@ class TradeRythmPlugin extends Plugin {
 
     this.addSettingTab(new TradeRythmSettingsTab(this.app, this));
 
-    // Wait for layout to be ready before opening the view
     this.app.workspace.onLayoutReady(async () => {
       if (this.app.workspace.getLeavesOfType(VIEW_TYPE).length === 0) {
         await this.activateView();
       }
     });
+
+    console.log("Trade Rythm plugin loaded successfully");
+    new Notice("Trade Rythm: loaded successfully!");
   }
 
   onunload() {
@@ -106,21 +114,29 @@ class TradeRythmPlugin extends Plugin {
   }
 
   async activateView() {
-    const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE);
-    if (leaves.length > 0) {
-      this.app.workspace.revealLeaf(leaves[0]);
-      return;
+    try {
+      const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE);
+      if (leaves.length > 0) {
+        this.app.workspace.revealLeaf(leaves[0]);
+        return;
+      }
+      const leaf = this.app.workspace.getLeftLeaf(false);
+      if (!leaf) {
+        new Notice("Trade Rythm: no leaf available");
+        return;
+      }
+      await leaf.setViewState({ type: VIEW_TYPE, active: true });
+      this.app.workspace.revealLeaf(leaf);
+    } catch (e) {
+      console.error("Trade Rythm activateView error:", e);
+      new Notice("Trade Rythm: " + e.message);
     }
-    const leaf = this.app.workspace.getLeftLeaf(false);
-    await leaf.setViewState({ type: VIEW_TYPE, active: true });
-    this.app.workspace.revealLeaf(leaf);
   }
 
   async createNewTrade(isBacktest) {
     const folder = isBacktest ? this.settings.backtestFolder : this.settings.tradeFolder;
     const label = isBacktest ? "Backtest" : "Trade";
 
-    // Get next trade number
     const files = this.app.vault.getMarkdownFiles();
     const maxNum = files
       .filter((f) => f.path.startsWith(folder))
@@ -134,13 +150,11 @@ class TradeRythmPlugin extends Plugin {
     const fileName = `Trade #${nextNum}${suffix}.md`;
     const filePath = `${folder}/${fileName}`;
 
-    // Build YAML
     const today = new Date().toISOString().split("T")[0];
     const yamlLines = this.settings.templateYaml.map((l) =>
       l.replace("{{date}}", today)
     );
 
-    // Build body
     const body = [
       "---",
       ...yamlLines,
@@ -189,13 +203,14 @@ class TradeRythmPlugin extends Plugin {
     ].join("\n");
 
     try {
-      await this.app.vault.create(filePath, body);
+      const newFile = await this.app.vault.create(filePath, body);
       const leaf = this.app.workspace.getLeaf(false);
-      await leaf.openFile(
-        this.app.vault.getAbstractFileByPath(filePath)
-      );
+      if (leaf && newFile) {
+        await leaf.openFile(newFile);
+      }
     } catch (e) {
-      new Notice(`Error creating ${label}: ${e.message}`);
+      console.error("Trade Rythm create error:", e);
+      new Notice(`Trade Rythm: ${e.message}`);
     }
   }
 
@@ -208,7 +223,6 @@ class TradeRythmPlugin extends Plugin {
 
   async saveSettings() {
     await this.saveData(this.settings);
-    // Refresh open views
     this.app.workspace.getLeavesOfType(VIEW_TYPE).forEach((l) => {
       if (l.view instanceof DatabaseView) l.view.render();
     });
@@ -226,7 +240,7 @@ class DatabaseView extends ItemView {
     this.sortAsc = true;
     this.filters = {};
     this.searchTerm = "";
-    this.activeTab = "trades"; // "trades" | "dashboard"
+    this.activeTab = "trades";
   }
 
   getViewType() {
@@ -245,11 +259,9 @@ class DatabaseView extends ItemView {
     this.containerEl.empty();
     this.containerEl.addClass("trade-rythm-plugin");
 
-    // Header
     const header = this.containerEl.createEl("div", { cls: "tj-header" });
     header.createEl("h2", { text: "Trade Rythm" });
 
-    // Tab bar
     const tabBar = this.containerEl.createEl("div", { cls: "tj-tabs" });
     this.tabTrades = tabBar.createEl("button", {
       text: "Trades",
@@ -262,7 +274,6 @@ class DatabaseView extends ItemView {
     this.tabTrades.addEventListener("click", () => this.switchTab("trades"));
     this.tabDashboard.addEventListener("click", () => this.switchTab("dashboard"));
 
-    // New trade button
     const btnBar = this.containerEl.createEl("div", { cls: "tj-btn-bar" });
     const btnNew = btnBar.createEl("button", {
       text: "+ New Trade",
@@ -278,10 +289,8 @@ class DatabaseView extends ItemView {
       this.plugin.createNewTrade(true)
     );
 
-    // Content area
     this.contentEl = this.containerEl.createEl("div", { cls: "tj-content" });
 
-    // Listen for file changes
     this.registerEvent(
       this.app.metadataCache.on("changed", () => this.render())
     );
@@ -337,7 +346,6 @@ class DatabaseView extends ItemView {
         file,
         isBacktest,
         frontmatter: fm,
-        // Computed
         date: fm["Entry / Exit Date"] || "",
         symbol: fm.Symbol ? this.stripWiki(fm.Symbol) : "",
         model: fm.Model ? this.stripWiki(fm.Model) : "",
@@ -378,7 +386,6 @@ class DatabaseView extends ItemView {
   applyFilters() {
     let list = [...this.trades];
 
-    // Search
     if (this.searchTerm) {
       const term = this.searchTerm.toLowerCase();
       list = list.filter(
@@ -389,7 +396,6 @@ class DatabaseView extends ItemView {
       );
     }
 
-    // Column filters
     for (const [key, val] of Object.entries(this.filters)) {
       if (!val) continue;
       list = list.filter((t) => {
@@ -398,7 +404,6 @@ class DatabaseView extends ItemView {
       });
     }
 
-    // Sort
     if (this.sortKey) {
       list.sort((a, b) => {
         let av = a[this.sortKey];
@@ -420,11 +425,9 @@ class DatabaseView extends ItemView {
     this.filteredTrades = list;
   }
 
-  // ── Filter Bar ───────────────────────────────────────
   renderFilterBar() {
     const bar = this.contentEl.createEl("div", { cls: "tj-filter-bar" });
 
-    // Search
     const search = bar.createEl("input", {
       cls: "tj-search",
       attr: { type: "text", placeholder: "Search symbol, model..." },
@@ -435,7 +438,6 @@ class DatabaseView extends ItemView {
       this.render();
     });
 
-    // Symbol filter
     const symbols = [...new Set(this.trades.map((t) => t.symbol).filter(Boolean))].sort();
     if (symbols.length > 0) {
       const sel = bar.createEl("select", { cls: "tj-filter-select" });
@@ -447,7 +449,6 @@ class DatabaseView extends ItemView {
       });
     }
 
-    // Model filter
     const models = [...new Set(this.trades.map((t) => t.model).filter(Boolean))].sort();
     if (models.length > 0) {
       const sel = bar.createEl("select", { cls: "tj-filter-select" });
@@ -459,7 +460,6 @@ class DatabaseView extends ItemView {
       });
     }
 
-    // Status filter
     const sel = bar.createEl("select", { cls: "tj-filter-select" });
     sel.createEl("option", { text: "All Status", value: "" });
     sel.createEl("option", { text: "Closed", value: "Closed" });
@@ -469,14 +469,12 @@ class DatabaseView extends ItemView {
       this.render();
     });
 
-    // Count
     bar.createEl("span", {
       text: `${this.filteredTrades.length} trades`,
       cls: "tj-count",
     });
   }
 
-  // ── Table ─────────────────────────────────────────────
   renderTable() {
     const cols = this.plugin.settings.columns;
 
@@ -485,7 +483,6 @@ class DatabaseView extends ItemView {
     const thead = table.createEl("thead");
     const tbody = table.createEl("tbody");
 
-    // Header row
     const tr = thead.createEl("tr");
     tr.createEl("th", { text: "#", cls: "tj-th-num" });
     cols.forEach((col) => {
@@ -505,7 +502,6 @@ class DatabaseView extends ItemView {
       });
     });
 
-    // Data rows
     this.filteredTrades.forEach((trade, i) => {
       const row = tbody.createEl("tr", { cls: "tj-row" });
       row.addEventListener("dblclick", () => {
@@ -525,13 +521,10 @@ class DatabaseView extends ItemView {
           td.setText(val.toFixed(2));
           td.toggleClass("tj-pnl-positive", val > 0);
           td.toggleClass("tj-pnl-negative", val < 0);
-        } else if (col === "Screenshots" && val) {
-          td.setText(val);
         } else {
           td.setText(val || "");
         }
 
-        // Inline editing
         td.addEventListener("dblclick", (e) => {
           e.stopPropagation();
           if (col === "Entry / Exit Date" || col === "Gross PnL" || col === "Status") {
@@ -657,7 +650,6 @@ class DatabaseView extends ItemView {
     }
     if (fmEnd < 0) return;
 
-    // Build new frontmatter lines
     const newLines = ["---"];
     for (const [key, val] of Object.entries(frontmatter)) {
       const yamlKey = key.includes(":") || key.includes("/") ? `"${key}"` : key;
@@ -683,7 +675,6 @@ class DatabaseView extends ItemView {
     await this.app.vault.modify(file, newLines.join("\n") + "\n" + rest);
   }
 
-  // ── Dashboard ─────────────────────────────────────────
   renderDashboard() {
     const trades = this.filteredTrades.filter((t) => t.status === "Closed");
     const allTrades = this.filteredTrades;
@@ -699,7 +690,6 @@ class DatabaseView extends ItemView {
 
     const dash = this.contentEl.createEl("div", { cls: "tj-dashboard" });
 
-    // Summary cards
     const cards = dash.createEl("div", { cls: "tj-dash-cards" });
 
     this.dashCard(cards, "Total Trades", String(allTrades.length), "");
@@ -714,16 +704,10 @@ class DatabaseView extends ItemView {
     this.dashCard(cards, "Worst Trade", `$${worst.toFixed(2)}`, "tj-pnl-negative");
     this.dashCard(cards, "Closed Trades", String(trades.length), "");
 
-    // PnL by Model
     this.renderGroupBreakdown(dash, "PnL by Model", trades, "model");
-
-    // PnL by Symbol
     this.renderGroupBreakdown(dash, "PnL by Symbol", trades, "symbol");
-
-    // PnL by Session
     this.renderGroupBreakdown(dash, "PnL by Session", trades, "session");
 
-    // Recent trades
     const recent = [...allTrades]
       .sort((a, b) => {
         const da = a.date ? new Date(a.date).getTime() : 0;
