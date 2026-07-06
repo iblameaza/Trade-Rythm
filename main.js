@@ -10,16 +10,22 @@ const VIEW_TYPE = "trade-rythm-db";
 
 // ─── Settings ───────────────────────────────────────────
 const SETUP_CATEGORIES = {
-  accounts: { label: "Accounts", folder: "Accounts", yaml: true, defaults: [] },
-  models: { label: "Models", folder: "Models", yaml: false, defaults: [] },
-  sessions: {
-    label: "Sessions", folder: "Sessions", yaml: false,
-    defaults: ["Asian", "London Open", "London Closed", "New York", "Out of Session"]
-  },
-  symbols: { label: "Symbols", folder: "Symbols", yaml: false, defaults: [] },
-  entryTimeframes: { label: "Entry Timeframes", folder: "Entry Timeframes", yaml: false, defaults: [] },
-  confluences: { label: "Confluences", folder: "Confluences", yaml: false, defaults: [] },
-  keyLevels: { label: "Key Levels", folder: "Key Levels", yaml: false, defaults: [] },
+  accounts: { label: "Accounts", folder: "Accounts", hasYaml: true, multi: false, defaults: [] },
+  models: { label: "Models", folder: "Models", multi: false, defaults: [] },
+  sessions: { label: "Sessions", folder: "Sessions", multi: false, defaults: ["Asian", "London Open", "London Closed", "New York", "Out of Session"] },
+  symbols: { label: "Symbols", folder: "Symbols", multi: false, defaults: ["BTC/USD", "SOL/USD", "EUR/USD", "GBP/USD", "USD/JPY", "USD/CAD", "AUD/USD", "NZD/USD", "USD/CHF", "XAU/USD"] },
+  entryTimeframes: { label: "Entry Timeframes", folder: "Entry Timeframes", multi: false, defaults: ["1 minutes", "3 minutes", "5 minutes", "15 minutes", "30 minutes", "1 Hour", "3 Hour", "4 Hour", "1 Day"] },
+  confluences: { label: "Confluences", folder: "Confluences", multi: true, defaults: ["HTF Trend Alignment", "SMT Divergence with Relative", "SMT Divergence with DXY", "Entry in OTE", "Displacement", "Aligned with Seasonal", "Commercials at Net Extreme", "Open Interest Rising"] },
+  keyLevels: { label: "Key Levels", folder: "Key Levels", multi: true, defaults: ["Order Block (1H)", "Order Block (4H)", "Order Block (1D)", "Liquidity Sweep", "Liquidity Vload", "Imbalance", "PDH", "OTE", "PDL", "Internal to External Liq", "External to Internal Liq", "Rejection Block (1H)", "Rejection Block (4H)", "Rejection Block (1D)"] },
+  entrySignals: { label: "Entry Signals", folder: "Entry Signals", multi: false, defaults: ["Candle Confirmation", "CSD", "Inversion-FVG"] },
+  marketConditions: { label: "Market Conditions", folder: "Market Conditions", multi: false, defaults: ["Pullback in uptrend", "Pullback in downtrend", "High volatility", "Low volatility", "Strong uptrend (HTF)", "Strong uptrend (LTF)", "Strong downtrend (HTF)", "Strong downtrend (LTF)", "Sideways (HTF)", "Sideways (LTF)", "Consolidation before breakout", "Consolidation before reversal", "Slowing momentum", "News-driven spike", "Economic news impact"] },
+  slManagement: { label: "SL Management", folder: "SL Management", multi: false, defaults: ["Locked Profit", "Moved to BE", "Hit Initial SL", "Hit Trailed SL", "Widened SL", "Initial SL Maintained", "Partial SL Adjustment", "Pre-News Tightening", "Delayed SL Placement", "Removed SL", "No SL"] },
+  tpManagement: { label: "TP Management", folder: "TP Management", multi: false, defaults: ["Final TP Hit", "Partial 1 Taken", "Partial 2 Taken", "Partial 3 Taken", "Let Runner Go", "Pre-News Exit", "No Momentum Exit", "Manual Close (Profit)", "Manual Close (BE)", "Manual Close (Loss)", "Setup Invalidated"] },
+  newsImpact: { label: "News Impact", folder: "News Impact", multi: false, defaults: ["High", "Medium", "Low"] },
+  typesOfTrade: { label: "Types of Trade", folder: "Types of Trade", multi: false, defaults: ["Scalping", "Day Trade", "Short Term Trade", "Swing Trade", "Position Trade"] },
+  mistakes: { label: "Mistakes", folder: "Mistakes", multi: true, defaults: [] },
+  orderTypes: { label: "Order Types", folder: "Order Types", multi: false, defaults: ["Limit Order", "Market Order", "Stop Order"] },
+  setupGrades: { label: "Setup Grades", folder: "Setup Grades", multi: false, defaults: ["A+", "A", "B", "C", "F"] },
 };
 
 const DEFAULT_SETTINGS = {
@@ -455,10 +461,17 @@ class DatabaseView extends ItemView {
         account: fm.Account ? this.stripWiki(fm.Account) : "",
         tradeType: fm["Type of Trade"] ? this.stripWiki(fm["Type of Trade"]) : "",
         orderType: fm["Order Type"] ? this.stripWiki(fm["Order Type"]) : "",
+        entrySignal: fm["Entry Signal"] ? this.stripWiki(fm["Entry Signal"]) : "",
+        marketConditions: fm["Market Conditions"] ? this.stripWiki(fm["Market Conditions"]) : "",
+        slManagement: fm["SL Management"] ? this.stripWiki(fm["SL Management"]) : "",
+        tpManagement: fm["TP Management"] ? this.stripWiki(fm["TP Management"]) : "",
+        newsImpact: fm["News Impact"] ? this.stripWiki(fm["News Impact"]) : "",
         mistakes: this.parseList(fm.Mistakes),
         confluences: this.parseList(fm.Confluences),
         keyLevels: this.parseList(fm["Key Levels"]),
         mistakesStr: this.parseListStr(fm.Mistakes),
+        confluencesStr: this.parseListStr(fm.Confluences),
+        keyLevelsStr: this.parseListStr(fm["Key Levels"]),
       });
     }
 
@@ -625,7 +638,7 @@ class DatabaseView extends ItemView {
 
         td.addEventListener("dblclick", (e) => {
           e.stopPropagation();
-          const editable = ["Entry / Exit Date", "Gross PnL", "Status", "Account", "Model", "Session", "Symbol", "Entry TimeFrame", "Setup Grade", "Type of Trade", "Order Type"];
+          const editable = ["Entry / Exit Date", "Gross PnL", "Status", "Account", "Model", "Session", "Symbol", "Entry TimeFrame", "Entry Signal", "Setup Grade", "Type of Trade", "Order Type", "Market Conditions", "SL Management", "TP Management", "News Impact", "Confluences", "Key Levels", "Mistakes"];
           if (editable.includes(col)) {
             this.createInlineEditor(td, trade, col);
           }
@@ -656,65 +669,77 @@ class DatabaseView extends ItemView {
       Account: "account",
       "Type of Trade": "tradeType",
       "Order Type": "orderType",
+      "Entry Signal": "entrySignal",
+      "Market Conditions": "marketConditions",
+      "SL Management": "slManagement",
+      "TP Management": "tpManagement",
+      "News Impact": "newsImpact",
       Mistakes: "mistakesStr",
+      Confluences: "confluencesStr",
+      "Key Levels": "keyLevelsStr",
     };
     return map[col] || col;
   }
 
   getCellValue(trade, col) {
     switch (col) {
-      case "Entry / Exit Date":
-        return trade.date;
-      case "Symbol":
-        return trade.symbol;
-      case "Model":
-        return trade.model;
-      case "Direction":
-        return trade.direction;
-      case "Status":
-        return trade.status;
-      case "Gross PnL":
-        return trade.pnl;
-      case "Session":
-        return trade.session;
-      case "Setup Grade":
-        return trade.setupGrade;
-      case "Account":
-        return trade.account;
-      case "Type of Trade":
-        return trade.tradeType;
-      case "Order Type":
-        return trade.orderType;
-      case "Mistakes":
-        return trade.mistakesStr;
-      case "Confluences":
-        return trade.confluences.join(", ");
-      case "Key Levels":
-        return trade.keyLevels.join(", ");
+      case "Entry / Exit Date": return trade.date;
+      case "Symbol": return trade.symbol;
+      case "Model": return trade.model;
+      case "Direction": return trade.direction;
+      case "Status": return trade.status;
+      case "Gross PnL": return trade.pnl;
+      case "Session": return trade.session;
+      case "Setup Grade": return trade.setupGrade;
+      case "Account": return trade.account;
+      case "Type of Trade": return trade.tradeType;
+      case "Order Type": return trade.orderType;
+      case "Entry Signal": return trade.entrySignal || "";
+      case "Market Conditions": return trade.marketConditions || "";
+      case "SL Management": return trade.slManagement || "";
+      case "TP Management": return trade.tpManagement || "";
+      case "News Impact": return trade.newsImpact || "";
+      case "Mistakes": return trade.mistakesStr;
+      case "Confluences": return trade.confluencesStr;
+      case "Key Levels": return trade.keyLevelsStr;
       default: {
         const fm = trade.frontmatter;
         const raw = fm[col];
         if (raw === null || raw === undefined) return "";
-        const s = String(raw);
-        return s.replace(/\[\[|\]\]/g, "");
+        return this.stripWiki(String(raw));
       }
     }
   }
 
   async getSetupOptions(col) {
-    const map = { Account: "accounts", Model: "models", Session: "sessions", Symbol: "symbols", "Entry TimeFrame": "entryTimeframes", Confluences: "confluences", "Key Levels": "keyLevels" };
+    const map = {
+      Account: "accounts", Model: "models", Session: "sessions", Symbol: "symbols",
+      "Entry TimeFrame": "entryTimeframes", "Entry Signal": "entrySignals",
+      "Market Conditions": "marketConditions", "SL Management": "slManagement",
+      "TP Management": "tpManagement", "News Impact": "newsImpact",
+      "Type of Trade": "typesOfTrade", "Order Type": "orderTypes",
+      "Setup Grade": "setupGrades", Confluences: "confluences",
+      "Key Levels": "keyLevels", Mistakes: "mistakes",
+    };
     const cat = map[col];
     if (!cat) return null;
     return await this.plugin.getSetupItems(cat);
   }
 
+  isMultiColumn(col) {
+    const map = { Confluences: "confluences", "Key Levels": "keyLevels", Mistakes: "mistakes" };
+    const cat = map[col];
+    return cat ? (SETUP_CATEGORIES[cat]?.multi || false) : false;
+  }
+
   async createInlineEditor(td, trade, col) {
     const current = this.getCellValue(trade, col);
     const options = await this.getSetupOptions(col);
+    const isMulti = this.isMultiColumn(col);
     td.empty();
 
     let input;
-    if (options && options.length > 0) {
+    if (options && options.length > 0 && !isMulti) {
       input = td.createEl("select", { cls: "tj-inline-editor tj-inline-select" });
       const blank = input.createEl("option", { text: "", value: "" });
       if (!current) blank.selected = true;
@@ -722,37 +747,51 @@ class DatabaseView extends ItemView {
         const opt = input.createEl("option", { text: o.name, value: o.name });
         if (o.name === current) opt.selected = true;
       });
-    } else {
-      input = td.createEl("input", {
-        cls: "tj-inline-editor",
-        attr: { type: "text" },
-      });
-      (input).value = current;
+      input.focus();
+
+      const save = async () => {
+        const newVal = input.value ? input.value.trim() : "";
+        const fm = trade.frontmatter;
+        if (col === "Gross PnL") { fm["Gross PnL"] = parseFloat(newVal) || 0; }
+        else { fm[col] = newVal; }
+        await this.writeFrontmatter(trade.file, fm);
+        setTimeout(() => this.render(), 200);
+      };
+      input.addEventListener("change", save);
+      input.addEventListener("blur", () => { if (!input.matches(":focus")) save(); });
+      return;
     }
 
+    const listId = "tj-list-" + Date.now();
+    input = td.createEl("input", { cls: "tj-inline-editor", attr: { type: "text", list: listId } });
+    input.value = current;
     input.focus();
-    if (input instanceof HTMLInputElement) input.select();
+    input.select();
+
+    if (options && options.length > 0) {
+      const dl = td.createEl("datalist", { attr: { id: listId } });
+      options.forEach((o) => dl.createEl("option", { attr: { value: o.name } }));
+    }
 
     const save = async () => {
       const newVal = input.value ? input.value.trim() : "";
       const fm = trade.frontmatter;
-      const yamlKey = col;
-      fm[yamlKey] = newVal;
-      if (col === "Gross PnL") fm["Gross PnL"] = parseFloat(newVal) || 0;
+      if (col === "Gross PnL") {
+        fm["Gross PnL"] = parseFloat(newVal) || 0;
+      } else if (isMulti) {
+        fm[col] = newVal.split(",").map((s) => s.trim()).filter(Boolean);
+      } else {
+        fm[col] = newVal;
+      }
       await this.writeFrontmatter(trade.file, fm);
       setTimeout(() => this.render(), 200);
     };
 
-    if (input instanceof HTMLSelectElement) {
-      input.addEventListener("change", save);
-      input.addEventListener("blur", () => { if (!input.matches(":focus")) save(); });
-    } else {
-      input.addEventListener("blur", save);
-      input.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") { (input).blur(); }
-        if (e.key === "Escape") { this.render(); }
-      });
-    }
+    input.addEventListener("blur", save);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { input.blur(); }
+      if (e.key === "Escape") { this.render(); }
+    });
   }
 
   async writeFrontmatter(file, frontmatter) {
