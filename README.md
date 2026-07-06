@@ -47,7 +47,7 @@ Your Vault/
 The `︱` character is **U+FE31**.
 
 ## Support
-
+if you found this plugin helpfull for your journey, you can give me any amount of tip here:
 ☕ [ko-fi.com/iblameaza](https://ko-fi.com/iblameaza)
 
 ## License
