@@ -102,6 +102,23 @@ class TradeRythmPlugin extends Plugin {
     } catch (e) {
       console.error("Trade Rythm initSetupFolders error:", e);
     }
+    // migrate old "Trading Setup" → "Trading Settings"
+    try {
+      const newPath = this.settings.setupFolder.replace("Trading Setup", "Trading Settings");
+      if (this.settings.setupFolder !== newPath) {
+        if (await this.app.vault.adapter.exists(this.settings.setupFolder)) {
+          const oldFolder = this.app.vault.getAbstractFileByPath(this.settings.setupFolder);
+          if (oldFolder) {
+            await this.app.vault.rename(oldFolder, newPath);
+            console.log("Migrated Trading Setup → Trading Settings");
+          }
+        }
+        this.settings.setupFolder = newPath;
+        await this.saveSettings();
+      }
+    } catch (e) {
+      console.log("Trade Rythm: setup folder migration skipped:", e.message);
+    }
 
     this.addRibbonIcon("dollar-sign", "Trade Rythm", () => this.activateView());
 
