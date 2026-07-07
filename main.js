@@ -33,7 +33,9 @@ const DEFAULT_SETTINGS = {
   tradeFolder: "Private Github/\ufe31 Trades Journal",
   backtestFolder: "Private Github/\ufe31 Backtest Journal",
   attachmentsFolder: "attachments",
-  setupFolder: "Private Github/\ufe31 Trading Setup",
+  setupFolder: "Private Github/\ufe31 Trading Settings",
+  previewMode: "live",
+  dashboardAccount: "",
   columns: [
     "Symbol", "Direction", "Account", "Type of Trade", "Entry TimeFrame",
     "Entry Signal", "Market Conditions", "Key Levels", "Confluences",
@@ -167,13 +169,13 @@ class TradeRythmPlugin extends Plugin {
     const maxNum = files
       .filter((f) => f.path.startsWith(folder))
       .reduce((max, f) => {
-        const m = f.name.match(new RegExp(`^Trade #(\\d+)`));
+        const m = f.name.match(new RegExp(`^Trade (\\d+)`));
         return m ? Math.max(max, parseInt(m[1])) : max;
       }, 0);
     const nextNum = maxNum + 1;
 
     const suffix = isBacktest ? " (Backtest)" : "";
-    const fileName = `Trade #${nextNum}${suffix}.md`;
+    const fileName = `Trade ${nextNum}${suffix}.md`;
     const filePath = `${folder}/${fileName}`;
 
     const today = new Date().toISOString().split("T")[0];
@@ -384,17 +386,28 @@ class DatabaseView extends ItemView {
       text: "Dashboard",
       cls: "tj-tab",
     });
-    this.btnSetup = tabBar.createEl("button", {
-      text: "Setup",
+    this.btnSettings = tabBar.createEl("button", {
+      text: "Settings",
       cls: "tj-tab",
     });
     this.tabTrades.addEventListener("click", () => this.switchTab("trades"));
     this.tabDashboard.addEventListener("click", () => this.switchTab("dashboard"));
-    this.btnSetup.addEventListener("click", () => {
-      new SetupModal(this.app, this.plugin).open();
+    this.btnSettings.addEventListener("click", () => {
+      new SettingsModal(this.app, this.plugin).open();
     });
 
     const btnBar = this.containerEl.createEl("div", { cls: "tj-btn-bar" });
+
+    this.btnModeToggle = btnBar.createEl("button", {
+      text: "Backtest",
+      cls: "tj-btn",
+    });
+    this.btnModeToggle.addEventListener("click", () => {
+      this.plugin.settings.previewMode = this.plugin.settings.previewMode === "live" ? "backtest" : "live";
+      this.plugin.saveSettings();
+      this.render();
+    });
+
     const btnNew = btnBar.createEl("button", {
       text: "+ New Trade",
       cls: "tj-btn tj-btn-primary",
@@ -408,6 +421,41 @@ class DatabaseView extends ItemView {
     btnBacktest.addEventListener("click", () =>
       this.plugin.createNewTrade(true)
     );
+
+    this.accountBtn = btnBar.createEl("button", {
+      text: "All Accounts ▼",
+      cls: "tj-btn",
+    });
+    this.accountBtn.addEventListener("click", async (e) => {
+      if (this.activeTab !== "dashboard") return;
+      const accounts = await this.plugin.getSetupItems("accounts");
+      const current = this.plugin.settings.dashboardAccount || "";
+      const popup = this.accountBtn.createEl("div", { cls: "tj-account-popup" });
+      const allItem = popup.createEl("div", { cls: "tj-account-item" + (!current ? " tj-account-sel" : "") });
+      allItem.textContent = "All Accounts";
+      allItem.addEventListener("mousedown", (e2) => {
+        e2.preventDefault();
+        this.plugin.settings.dashboardAccount = "";
+        this.plugin.saveSettings();
+        popup.remove();
+      });
+      for (const a of accounts) {
+        const item = popup.createEl("div", { cls: "tj-account-item" + (a.name === current ? " tj-account-sel" : "") });
+        item.textContent = a.name;
+        item.addEventListener("mousedown", (e2) => {
+          e2.preventDefault();
+          this.plugin.settings.dashboardAccount = a.name;
+          this.plugin.saveSettings();
+          popup.remove();
+        });
+      }
+      const closePopup = (e2) => {
+        if (!popup || popup.contains(e2.target)) return;
+        popup.remove();
+        document.removeEventListener("mousedown", closePopup, true);
+      };
+      document.addEventListener("mousedown", closePopup, true);
+    });
 
     this.contentEl = this.containerEl.createEl("div", { cls: "tj-content" });
 
@@ -431,13 +479,34 @@ class DatabaseView extends ItemView {
     this.render();
   }
 
+  updateModeUI() {
+    const isLive = this.plugin.settings.previewMode === "live";
+    this.btnModeToggle.textContent = isLive ? "Backtest" : "Live";
+    this.btnModeToggle.style.display = this.activeTab === "trades" ? "" : "none";
+    const da = this.plugin.settings.dashboardAccount || "All Accounts";
+    this.accountBtn.textContent = da + " ▼";
+    this.accountBtn.style.display = this.activeTab === "dashboard" ? "" : "none";
+  }
+
   async render() {
     this.contentEl.empty();
+    this.updateModeUI();
     await this.loadTrades();
 
+    const mode = this.plugin.settings.previewMode;
+    const modeTrades = this.trades.filter((t) =>
+      mode === "live" ? !t.isBacktest : t.isBacktest
+    );
+
     if (this.activeTab === "dashboard") {
+      const accountFilter = this.plugin.settings.dashboardAccount || "";
+      this.filteredTrades = accountFilter
+        ? this.trades.filter((t) => t.account === accountFilter)
+        : [...this.trades];
       this.renderDashboard();
     } else {
+      this.filteredTrades = modeTrades;
+      this.applyFilters();
       this.renderFilterBar();
       this.renderTable();
     }
@@ -490,8 +559,6 @@ class DatabaseView extends ItemView {
         keyLevelsStr: this.parseListStr(fm["Key Levels"]),
       });
     }
-
-    this.applyFilters();
   }
 
   stripWiki(val) {
@@ -900,71 +967,83 @@ class DatabaseView extends ItemView {
   }
 
   renderDashboard() {
-    const trades = this.filteredTrades.filter((t) => t.status === "Closed");
-    const allTrades = this.filteredTrades;
+    const closed = this.filteredTrades.filter((t) => t.status === "Closed");
+    const all = this.filteredTrades;
 
-    const closedPnl = trades
-      .map((t) => t.pnl ?? 0)
-      .reduce((a, b) => a + b, 0);
-    const wins = trades.filter((t) => t.pnl > 0);
-    const losses = trades.filter((t) => t.pnl < 0);
-    const winRate = trades.length > 0 ? (wins.length / trades.length) * 100 : 0;
-    const best = trades.length > 0 ? Math.max(...trades.map((t) => t.pnl ?? 0)) : 0;
-    const worst = trades.length > 0 ? Math.min(...trades.map((t) => t.pnl ?? 0)) : 0;
+    const netPnl = closed.reduce((s, t) => s + (t.pnl ?? 0), 0);
+    const wins = closed.filter((t) => t.pnl > 0);
+    const losses = closed.filter((t) => t.pnl < 0);
+    const winRate = closed.length > 0 ? (wins.length / closed.length) * 100 : 0;
+    const best = closed.length > 0 ? Math.max(...closed.map((t) => t.pnl ?? 0)) : 0;
+    const worst = closed.length > 0 ? Math.min(...closed.map((t) => t.pnl ?? 0)) : 0;
 
     const dash = this.contentEl.createEl("div", { cls: "tj-dashboard" });
 
     const cards = dash.createEl("div", { cls: "tj-dash-cards" });
-
-    this.dashCard(cards, "Total Trades", String(allTrades.length), "");
-    this.dashCard(
-      cards,
-      "Net PnL",
-      `$${closedPnl.toFixed(2)}`,
-      closedPnl >= 0 ? "tj-pnl-positive" : "tj-pnl-negative"
-    );
+    this.dashCard(cards, "Total Trades", String(all.length), "");
+    this.dashCard(cards, "Net PnL", `$${netPnl.toFixed(2)}`, netPnl >= 0 ? "tj-pnl-positive" : "tj-pnl-negative");
     this.dashCard(cards, "Win Rate", `${winRate.toFixed(1)}%`, winRate >= 50 ? "tj-pnl-positive" : "tj-pnl-negative");
     this.dashCard(cards, "Best Trade", `$${best.toFixed(2)}`, "tj-pnl-positive");
     this.dashCard(cards, "Worst Trade", `$${worst.toFixed(2)}`, "tj-pnl-negative");
-    this.dashCard(cards, "Closed Trades", String(trades.length), "");
 
-    this.renderGroupBreakdown(dash, "PnL by Model", trades, "model");
-    this.renderGroupBreakdown(dash, "PnL by Symbol", trades, "symbol");
-    this.renderGroupBreakdown(dash, "PnL by Session", trades, "session");
-    this.renderGroupBreakdown(dash, "PnL by Account", trades, "account");
+    const chartRow = dash.createEl("div", { cls: "tj-chart-row" });
+    this.renderDrawdownChart(chartRow, closed);
+    this.renderPerformanceChart(chartRow, closed);
 
-    const recent = [...allTrades]
-      .sort((a, b) => {
-        const da = a.date ? new Date(a.date).getTime() : 0;
-        const db = b.date ? new Date(b.date).getTime() : 0;
-        return db - da;
-      })
-      .slice(0, 10);
+    this.renderGroupBreakdown(dash, "PnL by Model", closed, "model");
+    this.renderGroupBreakdown(dash, "PnL by Symbol", closed, "symbol");
+    this.renderGroupBreakdown(dash, "PnL by Session", closed, "session");
+  }
 
-    if (recent.length > 0) {
-      const sec = dash.createEl("div", { cls: "tj-dash-section" });
-      sec.createEl("h3", { text: "Recent Trades" });
-      const tbl = sec.createEl("table", { cls: "tj-table tj-dash-table" });
-      const hdr = tbl.createEl("thead").createEl("tr");
-      hdr.createEl("th", { text: "Date" });
-      hdr.createEl("th", { text: "Symbol" });
-      hdr.createEl("th", { text: "Dir" });
-      hdr.createEl("th", { text: "Model" });
-      hdr.createEl("th", { text: "PnL" });
-      const bdy = tbl.createEl("tbody");
-      recent.forEach((t) => {
-        const r = bdy.createEl("tr");
-        r.createEl("td", { text: t.date ? t.date.slice(0, 10) : "" });
-        r.createEl("td", { text: t.symbol });
-        r.createEl("td", { text: t.direction });
-        r.createEl("td", { text: t.model });
-        const pnlTd = r.createEl("td", {
-          text: t.pnl !== null ? `$${t.pnl.toFixed(2)}` : "",
-        });
-        pnlTd.toggleClass("tj-pnl-positive", t.pnl > 0);
-        pnlTd.toggleClass("tj-pnl-negative", t.pnl < 0);
-      });
+  renderDrawdownChart(parent, trades) {
+    const sorted = [...trades].filter((t) => t.pnl != null).sort((a, b) => (a.date < b.date ? -1 : 1));
+    if (sorted.length < 2) {
+      const box = parent.createEl("div", { cls: "tj-chart-box" });
+      box.createEl("div", { text: "Drawdown", cls: "tj-chart-title" });
+      box.createEl("div", { text: "Not enough data", cls: "tj-chart-empty" });
+      return;
     }
+    let equity = 0, peak = -Infinity;
+    const ddSeries = [];
+    for (let i = 0; i < sorted.length; i++) {
+      equity += sorted[i].pnl ?? 0;
+      peak = Math.max(peak, equity);
+      const dd = peak > 0 ? ((peak - equity) / peak) * 100 : 0;
+      ddSeries.push(Math.max(0, dd));
+    }
+    this.renderLineChart(parent, "Drawdown", ddSeries, "#e74c3c", "%");
+  }
+
+  renderPerformanceChart(parent, trades) {
+    const sorted = [...trades].filter((t) => t.pnl != null).sort((a, b) => (a.date < b.date ? -1 : 1));
+    if (sorted.length < 2) {
+      const box = parent.createEl("div", { cls: "tj-chart-box" });
+      box.createEl("div", { text: "Performance Profile", cls: "tj-chart-title" });
+      box.createEl("div", { text: "Not enough data", cls: "tj-chart-empty" });
+      return;
+    }
+    let cum = 0;
+    const eqSeries = sorted.map((t) => { cum += t.pnl ?? 0; return cum; });
+    this.renderLineChart(parent, "Performance Profile", eqSeries, "#2ecc71", "$");
+  }
+
+  renderLineChart(parent, title, series, color, prefix) {
+    const box = parent.createEl("div", { cls: "tj-chart-box" });
+    box.createEl("div", { text: title, cls: "tj-chart-title" });
+    const svg = box.createEl("svg", { cls: "tj-chart-svg", attr: { viewBox: "0 0 400 160", preserveAspectRatio: "xMidYMid meet" } });
+    const W = 400, H = 160, pad = 5;
+    const min = Math.min(...series);
+    const max = Math.max(...series);
+    const range = max - min || 1;
+    const points = series.map((v, i) => {
+      const x = pad + (i / (series.length - 1)) * (W - 2 * pad);
+      const y = H - pad - ((v - min) / range) * (H - 2 * pad);
+      return `${x},${y}`;
+    });
+    const polyline = svg.createEl("polyline", { attr: { points: points.join(" "), fill: "none", stroke: color, "stroke-width": "2", "stroke-linejoin": "round" } });
+    const lastVal = series[series.length - 1];
+    const label = box.createEl("div", { cls: "tj-chart-label", text: `${prefix}${lastVal.toFixed(1)}` });
+    label.style.color = color;
   }
 
   dashCard(parent, label, value, cls) {
@@ -1017,7 +1096,7 @@ class DatabaseView extends ItemView {
 }
 
 // ─── Setup Modal ───────────────────────────────────────
-class SetupModal extends Modal {
+class SettingsModal extends Modal {
   constructor(app, plugin) {
     super(app);
     this.plugin = plugin;
@@ -1033,7 +1112,7 @@ class SetupModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.addClass("tj-modal");
-    contentEl.createEl("h2", { text: "Trading Setup" });
+    contentEl.createEl("h2", { text: "Trading Settings" });
 
     for (const [key, cfg] of Object.entries(SETUP_CATEGORIES)) {
       const items = await this.plugin.getSetupItems(key);
@@ -1082,7 +1161,7 @@ class SetupModal extends Modal {
       const pnl = 0; // computed from trades
       const row = bdy.createEl("tr");
       row.createEl("td", { text: item.name });
-      row.createEl("td", { text: SetupModal.formatCurrency(parseFloat(bal), cur) });
+      row.createEl("td", { text: SettingsModal.formatCurrency(parseFloat(bal), cur) });
       row.createEl("td", { text: cur });
       row.createEl("td", { text: typ });
       const del = row.createEl("td").createEl("button", { text: "✕", cls: "tj-btn tj-btn-sm tj-btn-danger" });
@@ -1163,7 +1242,7 @@ class TradeRythmSettingsTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Setup folder")
-      .setDesc("Vault-relative path to Trading Setup (Accounts, Models, Sessions, etc.)")
+      .setDesc("Vault-relative path to Trading Settings (Accounts, Models, Sessions, etc.)")
       .addText((text) =>
         text
           .setValue(this.plugin.settings.setupFolder)

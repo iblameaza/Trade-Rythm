@@ -467,3 +467,66 @@
 .tj-settings-commands li {
   margin: 2px 0;
 }
+
+/* ── Account Selector Popup ──────────────────── */
+.tj-account-popup {
+  position: absolute;
+  top: 100%; left: 0;
+  z-index: 1000;
+  background: var(--tj-bg);
+  border: 1px solid var(--tj-border);
+  border-radius: 4px;
+  min-width: 150px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  margin-top: 2px;
+}
+.tj-account-item {
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.tj-account-item:hover {
+  background: var(--tj-bg-alt);
+}
+.tj-account-sel {
+  font-weight: 600;
+  background: var(--tj-bg-alt);
+}
+
+/* ── Charts ──────────────────────────────────── */
+.tj-chart-row {
+  display: flex;
+  gap: 12px;
+  margin: 8px 0;
+}
+.tj-chart-box {
+  flex: 1;
+  background: var(--tj-bg-alt);
+  border-radius: 6px;
+  padding: 8px;
+}
+.tj-chart-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+  color: var(--tj-text-muted);
+}
+.tj-chart-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.tj-chart-label {
+  font-size: 13px;
+  font-weight: 700;
+  text-align: right;
+  margin-top: 2px;
+}
+.tj-chart-empty {
+  font-size: 12px;
+  color: var(--tj-text-muted);
+  text-align: center;
+  padding: 20px 0;
+}
