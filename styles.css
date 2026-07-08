@@ -185,20 +185,21 @@
 .tj-td:not(.tj-date-cell) {
   cursor: pointer;
   position: relative;
-  transition: box-shadow 0.2s ease;
+  transition: box-shadow 0.2s ease, background 0.2s ease;
+  overflow: visible;
 }
 .tj-td:not(.tj-date-cell):hover {
-  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
-  z-index: 1;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  background: var(--tj-bg-alt);
 }
 .tj-td:not(.tj-date-cell)::after {
   content: '';
   position: absolute;
   top: 0; left: 0;
   width: 100%; height: 100%;
-  background: linear-gradient(135deg, rgba(255,255,255,0.06) 0%, transparent 50%);
+  background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.03) 50%, transparent 65%);
   opacity: 0;
-  transition: opacity 0.2s ease;
+  transition: opacity 0.25s ease;
   pointer-events: none;
 }
 .tj-td:not(.tj-date-cell):hover::after {

@@ -786,26 +786,6 @@ class DatabaseView extends ItemView {
 
         td.addEventListener("click", (e) => {
           e.stopPropagation();
-          if (col === "Entry / Exit Date" || col === "Entry / Exit Date (end)") return;
-          const clickableMap = {
-            Symbol: "symbols", Direction: "positions", Session: "sessions",
-            Account: "accounts", Model: "models", "Type of Trade": "typesOfTrade",
-            "Entry TimeFrame": "entryTimeframes", "Entry Signal": "entrySignals",
-            "Market Conditions": "marketConditions", "SL Management": "slManagement",
-            "TP Management": "tpManagement", "News Impact": "newsImpact",
-            "Order Type": "orderTypes", "Setup Grade": "setupGrades",
-            "Status": null,
-          };
-          const cat = clickableMap[col];
-          if (cat) {
-            const fpath = `${this.plugin.settings.setupFolder}/${SETUP_CATEGORIES[cat].folder}/${String(val).trim()}.md`;
-            const f = this.app.vault.getAbstractFileByPath(fpath);
-            if (f) this.app.workspace.getLeaf(true).openFile(f);
-          }
-        });
-
-        td.addEventListener("dblclick", (e) => {
-          e.stopPropagation();
           const editable = ["Entry / Exit Date", "Gross PnL", "Status", "Account", "Model", "Session", "Symbol", "Entry TimeFrame", "Entry Signal", "Setup Grade", "Type of Trade", "Order Type", "Market Conditions", "SL Management", "TP Management", "News Impact", "Confluences", "Key Levels", "Mistakes", "Direction"];
           if (editable.includes(col)) {
             this.createInlineEditor(td, trade, col);
