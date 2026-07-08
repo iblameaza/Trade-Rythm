@@ -36,6 +36,7 @@ const DEFAULT_SETTINGS = {
   setupFolder: "Private Github/\ufe31 Trading Settings",
   previewMode: "live",
   dashboardAccount: "",
+  tableFontSize: "12",
   columns: [
     "Symbol", "Direction", "Account", "Type of Trade", "Entry TimeFrame",
     "Entry Signal", "Market Conditions", "Key Levels", "Confluences",
@@ -393,6 +394,11 @@ class DatabaseView extends ItemView {
 
     const header = this.containerEl.createEl("div", { cls: "tj-header" });
     header.createEl("h2", { text: "Trade Rythm" });
+    const kofi = header.createEl("a", {
+      cls: "tj-kofi",
+      attr: { href: "https://ko-fi.com/iblameaza", target: "_blank", title: "Support me on Ko-fi" },
+    });
+    kofi.innerHTML = '☕ <span>Support me</span>';
 
     const tabBar = this.containerEl.createEl("div", { cls: "tj-tabs" });
     this.tabTrades = tabBar.createEl("button", {
@@ -508,6 +514,7 @@ class DatabaseView extends ItemView {
   async render() {
     this.contentEl.empty();
     this.updateModeUI();
+    this.containerEl.style.setProperty("--tj-table-font-size", (this.plugin.settings.tableFontSize || "12") + "px");
     await this.loadTrades();
 
     const mode = this.plugin.settings.previewMode;
@@ -523,7 +530,7 @@ class DatabaseView extends ItemView {
       this.renderDashboard();
     } else {
       this.filteredTrades = modeTrades;
-      this.applyFilters();
+      await this.applyFilters();
       this.renderFilterBar();
       this.renderTable();
     }
@@ -548,8 +555,12 @@ class DatabaseView extends ItemView {
       const fm = cache.frontmatter;
       const isBacktest = file.path.startsWith(backtestFolder);
 
+      const tradeName = file.basename.replace(/#/g, "");
+      const tradeNum = parseInt(file.basename.match(/\d+/)?.[0]) || 0;
       this.trades.push({
         file,
+        name: tradeName,
+        tradeNum,
         isBacktest,
         frontmatter: fm,
         date: fm["Entry / Exit Date"] || "",
@@ -594,8 +605,8 @@ class DatabaseView extends ItemView {
     return this.parseList(val).join(", ");
   }
 
-  applyFilters() {
-    let list = [...this.trades];
+  async applyFilters() {
+    let list = [...this.filteredTrades];
 
     if (this.searchTerm) {
       const term = this.searchTerm.toLowerCase();
@@ -616,15 +627,38 @@ class DatabaseView extends ItemView {
     }
 
     if (this.sortKey) {
+      const sortCols = {
+        symbol: "symbols", direction: "positions", session: "sessions",
+        account: "accounts", model: "models", tradeType: "typesOfTrade",
+        setupGrade: "setupGrades", orderType: "orderTypes",
+        entrySignal: "entrySignals", marketConditions: "marketConditions",
+        slManagement: "slManagement", tpManagement: "tpManagement",
+        newsImpact: "newsImpact",
+      };
+      let orderMap = null;
+      const cat = sortCols[this.sortKey];
+      if (cat) {
+        const items = await this.plugin.getSetupItems(cat);
+        orderMap = {};
+        items.forEach((item, idx) => { orderMap[item.name.toLowerCase()] = idx; });
+      }
+
       list.sort((a, b) => {
         let av = a[this.sortKey];
         let bv = b[this.sortKey];
-        if (this.sortKey === "date") {
+        if (this.sortKey === "name") {
+          av = a.tradeNum;
+          bv = b.tradeNum;
+        } else if (this.sortKey === "date") {
           av = av ? new Date(av).getTime() : 0;
           bv = bv ? new Date(bv).getTime() : 0;
         } else if (this.sortKey === "pnl") {
           av = av ?? -999999;
           bv = bv ?? -999999;
+        } else if (orderMap) {
+          const ai = orderMap[String(av || "").toLowerCase()] ?? 99999;
+          const bi = orderMap[String(bv || "").toLowerCase()] ?? 99999;
+          return ai < bi ? (this.sortAsc ? -1 : 1) : ai > bi ? (this.sortAsc ? 1 : -1) : 0;
         } else {
           av = String(av || "").toLowerCase();
           bv = String(bv || "").toLowerCase();
@@ -695,12 +729,24 @@ class DatabaseView extends ItemView {
     const tbody = table.createEl("tbody");
 
     const tr = thead.createEl("tr");
-    tr.createEl("th", { text: "Trade", cls: "tj-th tj-th-name" });
+    const tradeArrow = this.sortKey === "name" ? (this.sortAsc ? " ↑" : " ↓") : "";
+    const tradeTh = tr.createEl("th", { text: "Trade" + tradeArrow, cls: "tj-th tj-th-name" + (this.sortKey === "name" ? " tj-th-sorted" : "") });
+    tradeTh.addEventListener("click", () => {
+      if (this.sortKey === "name") {
+        this.sortAsc = !this.sortAsc;
+      } else {
+        this.sortKey = "name";
+        this.sortAsc = true;
+      }
+      this.render();
+    });
     cols.forEach((col) => {
       const key = this.colKey(col);
+      const sorted = this.sortKey === key;
+      const arrow = sorted ? (this.sortAsc ? " ↑" : " ↓") : "";
       const th = tr.createEl("th", {
-        text: col,
-        cls: "tj-th" + (this.sortKey === key ? " tj-th-sorted" : ""),
+        text: col + arrow,
+        cls: "tj-th" + (sorted ? " tj-th-sorted" : ""),
       });
       th.addEventListener("click", () => {
         if (this.sortKey === key) {
@@ -725,6 +771,7 @@ class DatabaseView extends ItemView {
       cols.forEach((col) => {
         const key = this.colKey(col);
         const td = row.createEl("td", { cls: "tj-td" });
+        if (col === "Entry / Exit Date" || col === "Entry / Exit Date (end)") td.addClass("tj-date-cell");
 
         const val = this.getCellValue(trade, col);
         const isNumeric = typeof val === "number";
@@ -736,6 +783,26 @@ class DatabaseView extends ItemView {
         } else {
           td.setText(val || "");
         }
+
+        td.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (col === "Entry / Exit Date" || col === "Entry / Exit Date (end)") return;
+          const clickableMap = {
+            Symbol: "symbols", Direction: "positions", Session: "sessions",
+            Account: "accounts", Model: "models", "Type of Trade": "typesOfTrade",
+            "Entry TimeFrame": "entryTimeframes", "Entry Signal": "entrySignals",
+            "Market Conditions": "marketConditions", "SL Management": "slManagement",
+            "TP Management": "tpManagement", "News Impact": "newsImpact",
+            "Order Type": "orderTypes", "Setup Grade": "setupGrades",
+            "Status": null,
+          };
+          const cat = clickableMap[col];
+          if (cat) {
+            const fpath = `${this.plugin.settings.setupFolder}/${SETUP_CATEGORIES[cat].folder}/${String(val).trim()}.md`;
+            const f = this.app.vault.getAbstractFileByPath(fpath);
+            if (f) this.app.workspace.getLeaf(true).openFile(f);
+          }
+        });
 
         td.addEventListener("dblclick", (e) => {
           e.stopPropagation();
@@ -760,6 +827,7 @@ class DatabaseView extends ItemView {
 
   colKey(col) {
     const map = {
+      Trade: "name",
       "Entry / Exit Date": "date",
       Symbol: "symbol",
       Model: "model",
@@ -1267,6 +1335,18 @@ class TradeRythmSettingsTab extends PluginSettingTab {
             this.plugin.settings.setupFolder = v;
             await this.plugin.saveSettings();
             await this.plugin.initSetupFolders();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Table font size")
+      .setDesc("Font size for the trades table (px)")
+      .addText((text) =>
+        text
+          .setValue(this.plugin.settings.tableFontSize)
+          .onChange(async (v) => {
+            this.plugin.settings.tableFontSize = v || "12";
+            await this.plugin.saveSettings();
           })
       );
 
