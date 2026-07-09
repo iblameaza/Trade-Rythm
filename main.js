@@ -1004,42 +1004,11 @@ class DatabaseView extends ItemView {
         });
       }
 
-      const filterInput = wrapper.createEl("input", {
-        cls: "tj-inline-editor", attr: { type: "text", placeholder: "Select option..." },
-      });
-      filterInput.addEventListener("input", () => {
-        const term = filterInput.value.toLowerCase();
-        popup.querySelectorAll(".tj-dropdown-item").forEach((el) => {
-          const text = el.querySelector("span:last-child")?.textContent?.toLowerCase() || "";
-          el.style.display = text.includes(term) ? "" : "none";
-        });
-      });
-      filterInput.focus();
-
-      const closeDropdown = () => {
-        const p = wrapper.querySelector(".tj-dropdown-popup");
-        if (p) p.remove();
-      };
-      const finishEdit = () => {
-        if (isMulti) {
-          saveAndClose(selected.join(", "));
-        }
-        const p = wrapper.querySelector(".tj-dropdown-popup");
-        if (p) p.remove();
-      };
-      filterInput.addEventListener("keydown", (e) => {
-        if (e.key === "Escape") {
-          const p = wrapper.querySelector(".tj-dropdown-popup");
-          if (p) p.remove();
-        }
-        if (e.key === "Enter" && !isMulti) {
-          const visible = popup.querySelectorAll(".tj-dropdown-item:not([style*='display: none'])");
-          if (visible.length === 1) saveAndClose(visible[0].querySelector("span:last-child")?.textContent || "");
-        }
-      });
       document.addEventListener("mousedown", (e) => {
         if (!wrapper.contains(e.target)) {
-          finishEdit();
+          if (isMulti) saveAndClose(selected.join(", "));
+          const p = wrapper.querySelector(".tj-dropdown-popup");
+          if (p) p.remove();
         }
       }, { once: true });
     } else {
