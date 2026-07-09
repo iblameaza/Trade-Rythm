@@ -437,18 +437,12 @@
   width: 100%;
 }
 .tj-dropdown-popup {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  z-index: 1000;
   background: var(--tj-bg);
   border: 1px solid var(--tj-border);
   border-radius: 4px;
   max-height: 200px;
   overflow-y: auto;
   box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-  margin-top: 2px;
 }
 .tj-dropdown-item {
   padding: 4px 8px;

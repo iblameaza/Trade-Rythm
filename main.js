@@ -492,6 +492,15 @@ class DatabaseView extends ItemView {
       this.app.vault.on("delete", () => this.render())
     );
 
+    this._onDocMouseDown = (e) => {
+      const ed = this._ed;
+      if (!ed) return;
+      if (ed.popup.contains(e.target) || ed.wrapper.contains(e.target)) return;
+      if (ed.isMulti) ed.saveAndClose(ed.selected.join(", "));
+      this.cleanupEditor();
+    };
+    this.registerDomEvent(document, "mousedown", this._onDocMouseDown);
+
     await this.render();
   }
 
@@ -512,6 +521,7 @@ class DatabaseView extends ItemView {
   }
 
   async render() {
+    this.cleanupEditor();
     if (this._rendering) return;
     this._rendering = true;
     try {
@@ -937,14 +947,20 @@ class DatabaseView extends ItemView {
     return DatabaseView.YAML_KEY_MAP[col] || col;
   }
 
+  cleanupEditor() {
+    const p = document.querySelector(".tj-dropdown-popup");
+    if (p) p.remove();
+    this._ed = null;
+  }
+
   async createInlineEditor(td, trade, col, showDropdown) {
+    this.cleanupEditor();
     const current = this.getCellValue(trade, col);
     const options = await this.getSetupOptions(col);
     const isMulti = this.isMultiColumn(col);
     td.empty();
-    td.style.position = "relative";
 
-    const selected = isMulti ? current.split(",").map((s) => s.trim()).filter(Boolean) : [];
+    let selected = isMulti ? current.split(",").map((s) => s.trim()).filter(Boolean) : [];
 
     const wrapper = td.createEl("div", { cls: "tj-editor-wrapper" });
 
@@ -962,7 +978,10 @@ class DatabaseView extends ItemView {
     };
 
     if (options && options.length > 0) {
-      const popup = wrapper.createEl("div", { cls: "tj-dropdown-popup" });
+      const rect = td.getBoundingClientRect();
+      const popup = document.body.createEl("div", { cls: "tj-dropdown-popup" });
+      popup.style.cssText = `position:fixed;top:${rect.bottom + 2}px;left:${rect.left}px;width:${rect.width}px;z-index:999999;`;
+      this._ed = { wrapper, popup, saveAndClose, selected, isMulti };
 
       options.forEach((o) => {
         const item = popup.createEl("div", { cls: "tj-dropdown-item" });
@@ -986,8 +1005,9 @@ class DatabaseView extends ItemView {
             if (cb) cb.textContent = selected.includes(o.name) ? "☑ " : "☐ ";
             const doneBtn = popup.querySelector(".tj-dd-done");
             if (doneBtn) doneBtn.dataset.val = val;
+            if (this._ed) this._ed.selected = selected;
           } else {
-            saveAndClose(o.name);
+            saveAndClose(o.name).then(() => this.cleanupEditor());
           }
         });
       });
@@ -1000,17 +1020,9 @@ class DatabaseView extends ItemView {
         doneBtn.addEventListener("mousedown", (e) => {
           e.preventDefault();
           e.stopPropagation();
-          saveAndClose(doneBtn.dataset.val);
+          saveAndClose(doneBtn.dataset.val).then(() => this.cleanupEditor());
         });
       }
-
-      document.addEventListener("mousedown", (e) => {
-        if (!wrapper.contains(e.target)) {
-          if (isMulti) saveAndClose(selected.join(", "));
-          const p = wrapper.querySelector(".tj-dropdown-popup");
-          if (p) p.remove();
-        }
-      }, { once: true });
     } else {
       const input = wrapper.createEl("input", {
         cls: "tj-inline-editor", attr: { type: "text", placeholder: "None" },
