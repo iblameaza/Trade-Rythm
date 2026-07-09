@@ -517,11 +517,6 @@ class DatabaseView extends ItemView {
     this.containerEl.style.setProperty("--tj-table-font-size", (this.plugin.settings.tableFontSize || "12") + "px");
     await this.loadTrades();
 
-    const mode = this.plugin.settings.previewMode;
-    const modeTrades = this.trades.filter((t) =>
-      mode === "live" ? !t.isBacktest : t.isBacktest
-    );
-
     if (this.activeTab === "dashboard") {
       const accountFilter = this.plugin.settings.dashboardAccount || "";
       this.filteredTrades = accountFilter
@@ -529,7 +524,6 @@ class DatabaseView extends ItemView {
         : [...this.trades];
       this.renderDashboard();
     } else {
-      this.filteredTrades = modeTrades;
       await this.applyFilters();
       this.renderFilterBar();
       this.renderTable();
@@ -606,7 +600,10 @@ class DatabaseView extends ItemView {
   }
 
   async applyFilters() {
-    let list = [...this.filteredTrades];
+    const mode = this.plugin.settings.previewMode;
+    let list = this.trades.filter((t) =>
+      mode === "live" ? !t.isBacktest : t.isBacktest
+    );
 
     if (this.searchTerm) {
       const term = this.searchTerm.toLowerCase();
@@ -733,7 +730,8 @@ class DatabaseView extends ItemView {
     const tradeTh = tr.createEl("th", { text: "Trade" + tradeArrow, cls: "tj-th tj-th-name" + (this.sortKey === "name" ? " tj-th-sorted" : "") });
     tradeTh.addEventListener("click", () => {
       if (this.sortKey === "name") {
-        this.sortAsc = !this.sortAsc;
+        if (this.sortAsc) { this.sortAsc = false; }
+        else { this.sortKey = null; }
       } else {
         this.sortKey = "name";
         this.sortAsc = true;
@@ -750,7 +748,8 @@ class DatabaseView extends ItemView {
       });
       th.addEventListener("click", () => {
         if (this.sortKey === key) {
-          this.sortAsc = !this.sortAsc;
+          if (this.sortAsc) { this.sortAsc = false; }
+          else { this.sortKey = null; }
         } else {
           this.sortKey = key;
           this.sortAsc = true;
@@ -786,10 +785,17 @@ class DatabaseView extends ItemView {
 
         td.addEventListener("click", (e) => {
           e.stopPropagation();
-          const editable = ["Entry / Exit Date", "Gross PnL", "Status", "Account", "Model", "Session", "Symbol", "Entry TimeFrame", "Entry Signal", "Setup Grade", "Type of Trade", "Order Type", "Market Conditions", "SL Management", "TP Management", "News Impact", "Confluences", "Key Levels", "Mistakes", "Direction"];
+          const readonly = ["Gross PnL", "Fees", "S/L Pips", "% Risk", "Max RR reached", "Actual RR achieved: W(+1), L(-1), BE(0)", "Entry / Exit Date", "Entry / Exit Date (end)"];
+          if (readonly.includes(col)) return;
+          const editable = ["Status", "Account", "Model", "Session", "Symbol", "Entry TimeFrame", "Entry Signal", "Setup Grade", "Type of Trade", "Order Type", "Market Conditions", "SL Management", "TP Management", "News Impact", "Confluences", "Key Levels", "Mistakes", "Direction"];
           if (editable.includes(col)) {
-            this.createInlineEditor(td, trade, col);
+            this.createInlineEditor(td, trade, col, true);
           }
+        });
+        td.addEventListener("contextmenu", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          this.app.workspace.getLeaf(true).openFile(trade.file);
         });
       });
     });
@@ -889,7 +895,7 @@ class DatabaseView extends ItemView {
     return DatabaseView.YAML_KEY_MAP[col] || col;
   }
 
-  async createInlineEditor(td, trade, col) {
+  async createInlineEditor(td, trade, col, showDropdown) {
     const current = this.getCellValue(trade, col);
     const options = await this.getSetupOptions(col);
     const isMulti = this.isMultiColumn(col);
@@ -899,20 +905,12 @@ class DatabaseView extends ItemView {
     const selected = isMulti ? current.split(",").map((s) => s.trim()).filter(Boolean) : [];
 
     const wrapper = td.createEl("div", { cls: "tj-editor-wrapper" });
-    const input = wrapper.createEl("input", {
-      cls: "tj-inline-editor", attr: { type: "text", placeholder: isMulti ? "Select..." : "Type or pick..." },
-    });
-    input.value = current;
-    input.focus();
-    if (!isMulti) input.select();
 
     const saveAndClose = async (val) => {
-      const newVal = val != null ? val : (input.value ? input.value.trim() : "");
+      const newVal = val != null ? val : "";
       const key = this.yamlKey(col);
       const fm = trade.frontmatter;
-      if (col === "Gross PnL") {
-        fm["Gross PnL"] = parseFloat(newVal) || 0;
-      } else if (isMulti) {
+      if (isMulti) {
         fm[key] = newVal.split(",").map((s) => s.trim()).filter(Boolean);
       } else {
         fm[key] = newVal;
@@ -941,10 +939,11 @@ class DatabaseView extends ItemView {
             if (idx >= 0) selected.splice(idx, 1);
             else selected.push(o.name);
             const val = selected.join(", ");
-            input.value = val;
             item.toggleClass("tj-dd-selected");
             const cb = item.querySelector(".tj-dd-check");
             if (cb) cb.textContent = selected.includes(o.name) ? "☑ " : "☐ ";
+            const doneBtn = popup.querySelector(".tj-dd-done");
+            if (doneBtn) doneBtn.dataset.val = val;
           } else {
             saveAndClose(o.name);
           }
@@ -955,38 +954,65 @@ class DatabaseView extends ItemView {
         const doneBtn = popup.createEl("button", {
           text: "Done", cls: "tj-btn tj-btn-sm tj-btn-primary tj-dd-done",
         });
+        doneBtn.dataset.val = selected.join(", ");
         doneBtn.addEventListener("mousedown", (e) => {
           e.preventDefault();
-          saveAndClose(input.value);
+          saveAndClose(doneBtn.dataset.val);
         });
       }
 
-      input.addEventListener("input", () => {
-        const term = input.value.toLowerCase();
+      const filterInput = wrapper.createEl("input", {
+        cls: "tj-inline-editor", attr: { type: "text", placeholder: "Filter options..." },
+      });
+      filterInput.addEventListener("input", () => {
+        const term = filterInput.value.toLowerCase();
         popup.querySelectorAll(".tj-dropdown-item").forEach((el) => {
           const text = el.querySelector("span:last-child")?.textContent?.toLowerCase() || "";
           el.style.display = text.includes(term) ? "" : "none";
         });
       });
-    }
+      filterInput.focus();
 
-    const closeDropdown = () => {
-      const popup = wrapper.querySelector(".tj-dropdown-popup");
-      if (popup) popup.remove();
-    };
-
-    input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && !isMulti) { saveAndClose(); }
-      if (e.key === "Escape") { closeDropdown(); this.render(); }
-    });
-
-    input.addEventListener("blur", () => {
-      setTimeout(() => {
-        if (!wrapper.contains(document.activeElement)) {
-          saveAndClose();
+      const closeDropdown = () => {
+        const p = wrapper.querySelector(".tj-dropdown-popup");
+        if (p) p.remove();
+      };
+      filterInput.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") { closeDropdown(); this.render(); }
+        if (e.key === "Enter" && !isMulti) {
+          const visible = popup.querySelectorAll(".tj-dropdown-item:not([style*='display: none'])");
+          if (visible.length === 1) saveAndClose(visible[0].querySelector("span:last-child")?.textContent || "");
         }
-      }, 200);
-    });
+      });
+      filterInput.addEventListener("blur", () => {
+        setTimeout(() => {
+          if (!wrapper.contains(document.activeElement)) {
+            closeDropdown();
+            this.render();
+          }
+        }, 200);
+      });
+    } else {
+      const input = wrapper.createEl("input", {
+        cls: "tj-inline-editor", attr: { type: "text", placeholder: "None" },
+      });
+      input.value = current;
+      input.focus();
+      input.select();
+      const save = () => {
+        const v = input.value.trim();
+        saveAndClose(v || "");
+      };
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { save(); }
+        if (e.key === "Escape") { this.render(); }
+      });
+      input.addEventListener("blur", () => {
+        setTimeout(() => {
+          if (!wrapper.contains(document.activeElement)) save();
+        }, 200);
+      });
+    }
   }
 
   async writeFrontmatter(file, frontmatter) {
