@@ -512,6 +512,9 @@ class DatabaseView extends ItemView {
   }
 
   async render() {
+    if (this._rendering) return;
+    this._rendering = true;
+    try {
     this.contentEl.empty();
     this.updateModeUI();
     this.containerEl.style.setProperty("--tj-table-font-size", (this.plugin.settings.tableFontSize || "12") + "px");
@@ -528,6 +531,7 @@ class DatabaseView extends ItemView {
       this.renderFilterBar();
       this.renderTable();
     }
+    } finally { this._rendering = false; }
   }
 
   async loadTrades() {
@@ -544,9 +548,11 @@ class DatabaseView extends ItemView {
         continue;
       }
       const cache = this.app.metadataCache.getFileCache(file);
-      if (!cache || !cache.frontmatter) continue;
-
-      const fm = cache.frontmatter;
+      let fm = cache?.frontmatter || null;
+      if (!fm) {
+        fm = await this.readFrontmatterFromFile(file);
+        if (!fm) continue;
+      }
       const isBacktest = file.path.startsWith(backtestFolder);
 
       const tradeName = file.basename.replace(/#/g, "");
@@ -811,6 +817,42 @@ class DatabaseView extends ItemView {
     }
   }
 
+  async readFrontmatterFromFile(file) {
+    try {
+      const content = await this.app.vault.read(file);
+      const lines = content.split("\n");
+      if (lines[0]?.trim() !== "---") return null;
+      let end = -1;
+      for (let i = 1; i < lines.length; i++) {
+        if (lines[i].trim() === "---") { end = i; break; }
+      }
+      if (end < 0) return null;
+      const fm = {};
+      for (let i = 1; i < end; i++) {
+        const line = lines[i];
+        const colon = line.indexOf(":");
+        if (colon < 0) continue;
+        let key = line.slice(0, colon).trim();
+        let val = line.slice(colon + 1).trim();
+        if (key.startsWith('"') && key.endsWith('"')) key = key.slice(1, -1);
+        if (val === "null" || val === "") {
+          fm[key] = null;
+        } else if (val === "true") { fm[key] = true; }
+        else if (val === "false") { fm[key] = false; }
+        else if (/^-?\d+(\.\d+)?$/.test(val)) { fm[key] = parseFloat(val); }
+        else {
+          if (fm[key] !== undefined) {
+            if (!Array.isArray(fm[key])) fm[key] = [fm[key]];
+            fm[key].push(val);
+          } else {
+            fm[key] = val;
+          }
+        }
+      }
+      return Object.keys(fm).length > 0 ? fm : null;
+    } catch { return null; }
+  }
+
   colKey(col) {
     const map = {
       Trade: "name",
@@ -916,7 +958,6 @@ class DatabaseView extends ItemView {
         fm[key] = newVal;
       }
       await this.writeFrontmatter(trade.file, fm);
-      this.render();
     };
 
     if (options && options.length > 0) {
@@ -988,7 +1029,6 @@ class DatabaseView extends ItemView {
         setTimeout(() => {
           if (!wrapper.contains(document.activeElement)) {
             closeDropdown();
-            this.render();
           }
         }, 200);
       });
