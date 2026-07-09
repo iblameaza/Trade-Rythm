@@ -958,6 +958,7 @@ class DatabaseView extends ItemView {
         fm[key] = newVal;
       }
       await this.writeFrontmatter(trade.file, fm);
+      await this.waitForMetadata(trade.file);
     };
 
     if (options && options.length > 0) {
@@ -998,12 +999,13 @@ class DatabaseView extends ItemView {
         doneBtn.dataset.val = selected.join(", ");
         doneBtn.addEventListener("mousedown", (e) => {
           e.preventDefault();
+          e.stopPropagation();
           saveAndClose(doneBtn.dataset.val);
         });
       }
 
       const filterInput = wrapper.createEl("input", {
-        cls: "tj-inline-editor", attr: { type: "text", placeholder: "Filter options..." },
+        cls: "tj-inline-editor", attr: { type: "text", placeholder: "Select option..." },
       });
       filterInput.addEventListener("input", () => {
         const term = filterInput.value.toLowerCase();
@@ -1018,20 +1020,28 @@ class DatabaseView extends ItemView {
         const p = wrapper.querySelector(".tj-dropdown-popup");
         if (p) p.remove();
       };
+      const finishEdit = () => {
+        if (isMulti) {
+          saveAndClose(selected.join(", "));
+        }
+        const p = wrapper.querySelector(".tj-dropdown-popup");
+        if (p) p.remove();
+      };
       filterInput.addEventListener("keydown", (e) => {
-        if (e.key === "Escape") { closeDropdown(); this.render(); }
+        if (e.key === "Escape") {
+          const p = wrapper.querySelector(".tj-dropdown-popup");
+          if (p) p.remove();
+        }
         if (e.key === "Enter" && !isMulti) {
           const visible = popup.querySelectorAll(".tj-dropdown-item:not([style*='display: none'])");
           if (visible.length === 1) saveAndClose(visible[0].querySelector("span:last-child")?.textContent || "");
         }
       });
-      filterInput.addEventListener("blur", () => {
-        setTimeout(() => {
-          if (!wrapper.contains(document.activeElement)) {
-            closeDropdown();
-          }
-        }, 200);
-      });
+      document.addEventListener("mousedown", (e) => {
+        if (!wrapper.contains(e.target)) {
+          finishEdit();
+        }
+      }, { once: true });
     } else {
       const input = wrapper.createEl("input", {
         cls: "tj-inline-editor", attr: { type: "text", placeholder: "None" },
@@ -1039,19 +1049,15 @@ class DatabaseView extends ItemView {
       input.value = current;
       input.focus();
       input.select();
-      const save = () => {
-        const v = input.value.trim();
-        saveAndClose(v || "");
-      };
       input.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") { save(); }
-        if (e.key === "Escape") { this.render(); }
+        if (e.key === "Enter") { saveAndClose(input.value.trim() || ""); }
+        if (e.key === "Escape") { input.blur(); }
       });
-      input.addEventListener("blur", () => {
-        setTimeout(() => {
-          if (!wrapper.contains(document.activeElement)) save();
-        }, 200);
-      });
+      document.addEventListener("mousedown", (e) => {
+        if (!wrapper.contains(e.target)) {
+          saveAndClose(input.value.trim() || "");
+        }
+      }, { once: true });
     }
   }
 
@@ -1095,6 +1101,21 @@ class DatabaseView extends ItemView {
 
     const rest = lines.slice(fmEnd + 1).join("\n");
     await this.app.vault.modify(file, newLines.join("\n") + "\n" + rest);
+  }
+
+  waitForMetadata(file) {
+    return new Promise((resolve) => {
+      const cached = this.app.metadataCache.getFileCache(file);
+      if (cached?.frontmatter) { resolve(); return; }
+      const handler = (changedFile) => {
+        if (changedFile.path === file.path) {
+          this.app.metadataCache.off("changed", handler);
+          resolve();
+        }
+      };
+      this.app.metadataCache.on("changed", handler);
+      setTimeout(() => resolve(), 3000);
+    });
   }
 
   renderDashboard() {
