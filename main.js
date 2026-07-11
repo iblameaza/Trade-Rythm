@@ -1060,13 +1060,16 @@ class DatabaseView extends ItemView {
         let doneBtn = null;
         if (isMulti) {
           doneBtn = editor.createEl("button", {
-            text: "Done", cls: "tj-btn tj-btn-sm tj-btn-primary tj-dd-done",
+            text: "Close", cls: "tj-btn tj-btn-sm tj-btn-primary tj-dd-done",
           });
-          doneBtn.dataset.val = selected.join(", ");
           doneBtn.addEventListener("mousedown", (e) => {
             e.preventDefault();
             e.stopPropagation();
-            selectVal(doneBtn.dataset.val);
+            delete pending[col];
+            valEl.textContent = current || "—";
+            editor.remove();
+            activeEditors.delete(row);
+            row.removeClass("tj-panel-row-open");
           });
         }
       });
