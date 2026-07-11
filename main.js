@@ -776,10 +776,6 @@ class DatabaseView extends ItemView {
 
     this.filteredTrades.forEach((trade, i) => {
       const row = tbody.createEl("tr", { cls: "tj-row" });
-      row.addEventListener("dblclick", () => {
-        this.app.workspace.getLeaf(false).openFile(trade.file);
-      });
-
       const name = trade.file.basename.replace(/#/g, "");
       row.createEl("td", { text: name, cls: "tj-td tj-td-name" });
 
@@ -1089,6 +1085,7 @@ class DatabaseView extends ItemView {
       }
       await this.writeFrontmatter(trade.file, fm);
       await this.waitForMetadata(trade.file);
+      await this.updateSetupBacklinks(trade, pending);
       closePanel();
     });
 
@@ -1154,6 +1151,82 @@ class DatabaseView extends ItemView {
       this.app.metadataCache.on("changed", handler);
       setTimeout(() => resolve(), 3000);
     });
+  }
+
+  async updateSetupBacklinks(trade, pending) {
+    const tradeName = trade.file.basename;
+    const tradeLink = `- [[${tradeName}]]`;
+    const sectionHeader = "## Referenced In";
+
+    const mergedFm = { ...trade.frontmatter };
+    for (const [col, val] of Object.entries(pending)) {
+      const key = this.yamlKey(col);
+      if (this.isMultiColumn(col)) {
+        mergedFm[key] = val.split(",").map((s) => s.trim()).filter(Boolean);
+      } else {
+        mergedFm[key] = val;
+      }
+    }
+
+    const oldPaths = new Set();
+    const newPaths = new Set();
+    const colCache = {};
+
+    for (const col of ["Account", "Model", "Session", "Symbol", "Direction",
+      "Entry TimeFrame", "Entry Signal", "Market Conditions", "SL Management", "TP Management",
+      "News Impact", "Type of Trade", "Order Type", "Setup Grade", "Confluences", "Key Levels", "Mistakes"]) {
+      const items = await this.getSetupOptions(col);
+      if (!items) continue;
+      colCache[col] = items;
+
+      const key = this.yamlKey(col);
+      const resolvePaths = (fm) => {
+        let raw = fm[key];
+        let values = [];
+        if (Array.isArray(raw)) values = raw.map((v) => this.stripWiki(String(v))).filter(Boolean);
+        else if (raw) values = [this.stripWiki(String(raw))];
+        const paths = new Set();
+        for (const val of values) {
+          const m = items.find((i) => i.name === val);
+          if (m) paths.add(m.path);
+        }
+        return paths;
+      };
+
+      for (const p of resolvePaths(trade.frontmatter)) oldPaths.add(p);
+      for (const p of resolvePaths(mergedFm)) newPaths.add(p);
+    }
+
+    const add = [...newPaths].filter((p) => !oldPaths.has(p));
+    const remove = [...oldPaths].filter((p) => !newPaths.has(p));
+
+    const adapter = this.app.vault.adapter;
+
+    for (const path of remove) {
+      try {
+        let content = await adapter.read(path);
+        const re = new RegExp(`^\\s*\\- \\[\\[${tradeName}\\]\\]\\s*\\n?`, "gm");
+        content = content.replace(re, "");
+        await adapter.write(path, content);
+      } catch (e) {
+        console.error(`Trade Rythm: failed to remove backlink from ${path}`, e);
+      }
+    }
+
+    for (const path of add) {
+      try {
+        let content = await adapter.read(path);
+        const idx = content.indexOf(sectionHeader);
+        if (idx >= 0) {
+          content = content.replace(sectionHeader, `${sectionHeader}\n${tradeLink}`);
+        } else {
+          content = content.trimEnd() + `\n\n${sectionHeader}\n${tradeLink}\n`;
+        }
+        await adapter.write(path, content);
+      } catch (e) {
+        console.error(`Trade Rythm: failed to add backlink to ${path}`, e);
+      }
+    }
   }
 
   renderDashboard() {
