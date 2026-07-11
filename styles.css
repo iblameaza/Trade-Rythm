@@ -618,3 +618,108 @@
 .tj-date-cell {
   cursor: default;
 }
+
+/* ── Trade Edit Panel ──────────────────────────── */
+.tj-panel-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: rgba(0,0,0,0.2);
+}
+.tj-trade-panel {
+  position: fixed;
+  top: 40px;
+  right: 16px;
+  width: 320px;
+  max-height: calc(100vh - 80px);
+  background: var(--tj-bg);
+  border: 1px solid var(--tj-border);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+  display: flex;
+  flex-direction: column;
+  z-index: 100000;
+}
+.tj-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--tj-border);
+  font-weight: 600;
+  font-size: 14px;
+}
+.tj-panel-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  color: var(--tj-text-muted);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.tj-panel-close:hover {
+  background: var(--tj-bg-alt);
+}
+.tj-panel-rows {
+  overflow-y: auto;
+  flex: 1;
+  padding: 4px 0;
+}
+.tj-panel-row {
+  display: flex;
+  align-items: center;
+  padding: 8px 14px;
+  cursor: pointer;
+  gap: 8px;
+  min-height: 32px;
+}
+.tj-panel-row:hover {
+  background: var(--tj-bg-alt);
+}
+.tj-panel-focus {
+  background: var(--tj-accent-bg);
+  border-left: 3px solid var(--tj-accent);
+}
+.tj-panel-label {
+  width: 100px;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--tj-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.tj-panel-value {
+  flex: 1;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tj-panel-row-open {
+  flex-direction: column;
+  align-items: stretch;
+}
+.tj-panel-editor {
+  margin-top: 4px;
+  border: 1px solid var(--tj-border);
+  border-radius: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+  background: var(--tj-bg);
+}
+.tj-dd-item {
+  padding: 6px 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+.tj-dd-item:hover {
+  background: var(--tj-bg-alt);
+}
+.tj-dd-item.tj-dd-selected {
+  background: var(--tj-bg-alt);
+  font-weight: 600;
+}

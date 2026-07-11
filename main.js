@@ -496,9 +496,10 @@ class DatabaseView extends ItemView {
     this._onDocMouseDown = (e) => {
       const ed = this._ed;
       if (!ed) return;
-      if (ed.popup.contains(e.target) || ed.wrapper.contains(e.target)) return;
-      if (ed.isMulti) ed.saveAndClose(ed.selected.join(", "));
-      this.cleanupEditor();
+      if (ed.overlay) {
+        if (ed.overlay.contains(e.target)) return;
+        this.cleanupEditor();
+      }
     };
     this.registerDomEvent(document, "mousedown", this._onDocMouseDown);
 
@@ -806,7 +807,7 @@ class DatabaseView extends ItemView {
           if (readonly.includes(col)) return;
           const editable = ["Status", "Account", "Model", "Session", "Symbol", "Entry TimeFrame", "Entry Signal", "Setup Grade", "Type of Trade", "Order Type", "Market Conditions", "SL Management", "TP Management", "News Impact", "Confluences", "Key Levels", "Mistakes", "Direction"];
           if (editable.includes(col)) {
-            this.createInlineEditor(td, trade, col, true);
+            this.openTradePanel(trade, col);
           }
         });
         td.addEventListener("contextmenu", (e) => {
@@ -949,8 +950,8 @@ class DatabaseView extends ItemView {
   }
 
   cleanupEditor() {
-    const p = document.querySelector(".tj-dropdown-popup");
-    if (p) p.remove();
+    const p = document.querySelector(".tj-panel-overlay");
+    if (p && p.parentNode) p.parentNode.removeChild(p);
     this._ed = null;
   }
 
@@ -974,95 +975,113 @@ class DatabaseView extends ItemView {
     }
   }
 
-  async createInlineEditor(td, trade, col, showDropdown) {
+  async openTradePanel(trade, focusCol) {
     this.cleanupEditor();
-    const current = this.getCellValue(trade, col);
-    const options = await this.getSetupOptions(col);
-    if (!document.contains(td)) return;
-    const isMulti = this.isMultiColumn(col);
 
-    if (!options || options.length === 0) return;
+    const editableCols = ["Status", "Account", "Model", "Session", "Symbol",
+      "Entry TimeFrame", "Entry Signal", "Setup Grade", "Type of Trade",
+      "Order Type", "Market Conditions", "SL Management", "TP Management",
+      "News Impact", "Confluences", "Key Levels", "Direction"];
 
-    td.empty();
+    const overlay = document.body.createEl("div", { cls: "tj-panel-overlay" });
+    const panel = overlay.createEl("div", { cls: "tj-trade-panel" });
+    this._ed = { overlay };
 
-    let selected = isMulti ? current.split(",").map((s) => s.trim()).filter(Boolean) : [];
+    const closePanel = () => { this.cleanupEditor(); overlay.remove(); };
 
-    const wrapper = td.createEl("div", { cls: "tj-editor-wrapper" });
+    const header = panel.createEl("div", { cls: "tj-panel-header" });
+    header.createEl("span", { text: `Trade #${trade.tradeNum}` });
+    header.createEl("button", { text: "✕", cls: "tj-panel-close" }).addEventListener("click", closePanel);
 
-    const saveAndClose = async (val) => {
-      const newVal = val != null ? val : "";
-      const key = this.yamlKey(col);
-      const fm = trade.frontmatter;
-      if (isMulti) {
-        fm[key] = newVal.split(",").map((s) => s.trim()).filter(Boolean);
-      } else {
-        fm[key] = newVal;
-      }
-      await this.writeFrontmatter(trade.file, fm);
-      await this.waitForMetadata(trade.file);
-    };
+    const rowsEl = panel.createEl("div", { cls: "tj-panel-rows" });
+    let focusRow = null;
+    const activeEditors = new Set();
 
-      const rect = td.getBoundingClientRect();
-      const popup = document.body.createEl("div", { cls: "tj-dropdown-popup" });
-      const approxHeight = Math.min(options.length * 36 + 40, 200);
-      const spaceBelow = window.innerHeight - rect.bottom;
-      const top = spaceBelow >= approxHeight || rect.top < approxHeight
-        ? rect.bottom + 2 : rect.top - approxHeight;
-      let left = rect.left;
-      let width = Math.max(rect.width, 180);
-      if (left + width > window.innerWidth - 8) {
-        left = Math.max(8, window.innerWidth - width - 8);
-      }
-      popup.style.cssText = `position:fixed;top:${top}px;left:${left}px;width:${width}px;z-index:999999;`;
-      this._ed = { wrapper, popup, saveAndClose, selected, isMulti };
+    for (const col of editableCols) {
+      const current = this.getCellValue(trade, col);
+      const row = rowsEl.createEl("div", { cls: "tj-panel-row" });
+      row.createEl("span", { cls: "tj-panel-label", text: col });
+      const valEl = row.createEl("span", { cls: "tj-panel-value", text: current || "—" });
+      if (col === focusCol) { focusRow = row; row.addClass("tj-panel-focus"); }
 
-      const linkResults = await Promise.all(options.map((o) => this.getOptionWikilinks(o.path)));
-      if (!document.contains(td) || !document.contains(popup)) { this.cleanupEditor(); return; }
+      row.addEventListener("click", async () => {
+        if (activeEditors.has(row)) return;
+        const old = row.querySelector(".tj-panel-editor");
+        if (old) { old.remove(); activeEditors.delete(row); return; }
 
-      options.forEach((o, i) => {
-        const item = popup.createEl("div", { cls: "tj-dropdown-item" });
-        const isSel = isMulti ? selected.includes(o.name) : (o.name === current);
-        item.createEl("span", { text: isSel ? "☑ " : "☐ ", cls: "tj-dd-check" });
-        const textWrap = item.createEl("div", { cls: "tj-dd-text" });
-        textWrap.createEl("span", { cls: "tj-dd-name", text: o.name });
-        if (isSel) item.addClass("tj-dd-selected");
+        const options = await this.getSetupOptions(col);
+        if (!options || options.length === 0) return;
 
-        const links = linkResults[i];
-        if (links) {
-          textWrap.createEl("span", { cls: "tj-dd-links", text: links });
+        const isMulti = this.isMultiColumn(col);
+        let selected = isMulti ? current.split(",").map((s) => s.trim()).filter(Boolean) : [];
+
+        const editor = row.createEl("div", { cls: "tj-panel-editor" });
+        activeEditors.add(row);
+        row.addClass("tj-panel-row-open");
+
+        const saveVal = async (v) => {
+          const key = this.yamlKey(col);
+          const fm = trade.frontmatter;
+          if (isMulti) fm[key] = v.split(",").map((s) => s.trim()).filter(Boolean);
+          else fm[key] = v;
+          await this.writeFrontmatter(trade.file, fm);
+          await this.waitForMetadata(trade.file);
+          valEl.textContent = v || "—";
+          editor.remove();
+          activeEditors.delete(row);
+          row.removeClass("tj-panel-row-open");
+        };
+
+        const linkResults = await Promise.all(options.map((o) => this.getOptionWikilinks(o.path)));
+
+        options.forEach((o, i) => {
+          const item = editor.createEl("div", { cls: "tj-dd-item" });
+          const isSel = isMulti ? selected.includes(o.name) : (o.name === current);
+          item.createEl("span", { text: isSel ? "☑ " : "☐ ", cls: "tj-dd-check" });
+          const tw = item.createEl("span", { cls: "tj-dd-name", text: o.name });
+          if (isSel) item.addClass("tj-dd-selected");
+          const links = linkResults[i];
+          if (links) item.createEl("span", { cls: "tj-dd-links", text: links });
+
+          item.addEventListener("mousedown", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (isMulti) {
+              const idx = selected.indexOf(o.name);
+              if (idx >= 0) selected.splice(idx, 1);
+              else selected.push(o.name);
+              const v = selected.join(", ");
+              item.toggleClass("tj-dd-selected");
+              const cb = item.querySelector(".tj-dd-check");
+              if (cb) cb.textContent = selected.includes(o.name) ? "☑ " : "☐ ";
+              if (!doneBtn) return;
+              doneBtn.dataset.val = v;
+            } else {
+              saveVal(o.name);
+            }
+          });
+        });
+
+        let doneBtn = null;
+        if (isMulti) {
+          doneBtn = editor.createEl("button", {
+            text: "Done", cls: "tj-btn tj-btn-sm tj-btn-primary tj-dd-done",
+          });
+          doneBtn.dataset.val = selected.join(", ");
+          doneBtn.addEventListener("mousedown", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            saveVal(doneBtn.dataset.val);
+          });
         }
-
-        item.addEventListener("mousedown", (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          if (isMulti) {
-            const idx = selected.indexOf(o.name);
-            if (idx >= 0) selected.splice(idx, 1);
-            else selected.push(o.name);
-            const val = selected.join(", ");
-            item.toggleClass("tj-dd-selected");
-            const cb = item.querySelector(".tj-dd-check");
-            if (cb) cb.textContent = selected.includes(o.name) ? "☑ " : "☐ ";
-            const doneBtn = popup.querySelector(".tj-dd-done");
-            if (doneBtn) doneBtn.dataset.val = val;
-            if (this._ed) this._ed.selected = selected;
-          } else {
-            saveAndClose(o.name).then(() => this.cleanupEditor());
-          }
-        });
       });
+    }
 
-      if (isMulti) {
-        const doneBtn = popup.createEl("button", {
-          text: "Done", cls: "tj-btn tj-btn-sm tj-btn-primary tj-dd-done",
-        });
-        doneBtn.dataset.val = selected.join(", ");
-        doneBtn.addEventListener("mousedown", (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          saveAndClose(doneBtn.dataset.val).then(() => this.cleanupEditor());
-        });
-      }
+    if (focusRow) setTimeout(() => focusRow.scrollIntoView({ block: "start" }), 50);
+
+    document.addEventListener("mousedown", (e) => {
+      if (!overlay.contains(e.target)) closePanel();
+    }, { once: true });
   }
 
   async writeFrontmatter(file, frontmatter) {
