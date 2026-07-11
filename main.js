@@ -1127,7 +1127,12 @@ class DatabaseView extends ItemView {
       } else if (typeof val === "boolean") {
         newLines.push(`${yamlKey}: ${val}`);
       } else if (Array.isArray(val)) {
-        val.forEach((v) => newLines.push(`${yamlKey}: ${v}`));
+        if (val.length === 0) {
+          newLines.push(`${yamlKey}: []`);
+        } else {
+          newLines.push(`${yamlKey}:`);
+          val.forEach((v) => newLines.push(`  - ${v}`));
+        }
       } else {
         newLines.push(`${yamlKey}: ${val}`);
       }
