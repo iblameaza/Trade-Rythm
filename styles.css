@@ -621,6 +621,12 @@
 
 /* ── Trade Edit Panel ──────────────────────────── */
 .tj-trade-panel {
+  --tj-bg: var(--background-primary);
+  --tj-bg-alt: var(--background-secondary);
+  --tj-border: var(--background-modifier-border);
+  --tj-text: var(--text-normal);
+  --tj-text-muted: var(--text-muted);
+  --tj-accent: var(--interactive-accent);
   position: fixed;
   top: 50%;
   left: 50%;
