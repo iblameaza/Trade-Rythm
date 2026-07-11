@@ -482,14 +482,15 @@ class DatabaseView extends ItemView {
 
     this.contentEl = this.containerEl.createEl("div", { cls: "tj-content" });
 
+    const safeRender = () => { if (!this._ed) this.render(); };
     this.registerEvent(
-      this.app.metadataCache.on("changed", () => this.render())
+      this.app.metadataCache.on("changed", safeRender)
     );
     this.registerEvent(
-      this.app.vault.on("create", () => this.render())
+      this.app.vault.on("create", safeRender)
     );
     this.registerEvent(
-      this.app.vault.on("delete", () => this.render())
+      this.app.vault.on("delete", safeRender)
     );
 
     this._onDocMouseDown = (e) => {
@@ -977,6 +978,7 @@ class DatabaseView extends ItemView {
     this.cleanupEditor();
     const current = this.getCellValue(trade, col);
     const options = await this.getSetupOptions(col);
+    if (!document.contains(td)) return;
     const isMulti = this.isMultiColumn(col);
 
     if (!options || options.length === 0) return;
@@ -1014,7 +1016,10 @@ class DatabaseView extends ItemView {
       popup.style.cssText = `position:fixed;top:${top}px;left:${left}px;width:${width}px;z-index:999999;`;
       this._ed = { wrapper, popup, saveAndClose, selected, isMulti };
 
-      for (const o of options) {
+      const linkResults = await Promise.all(options.map((o) => this.getOptionWikilinks(o.path)));
+      if (!document.contains(td) || !document.contains(popup)) { this.cleanupEditor(); return; }
+
+      options.forEach((o, i) => {
         const item = popup.createEl("div", { cls: "tj-dropdown-item" });
         const isSel = isMulti ? selected.includes(o.name) : (o.name === current);
         item.createEl("span", { text: isSel ? "☑ " : "☐ ", cls: "tj-dd-check" });
@@ -1022,7 +1027,7 @@ class DatabaseView extends ItemView {
         textWrap.createEl("span", { cls: "tj-dd-name", text: o.name });
         if (isSel) item.addClass("tj-dd-selected");
 
-        const links = await this.getOptionWikilinks(o.path);
+        const links = linkResults[i];
         if (links) {
           textWrap.createEl("span", { cls: "tj-dd-links", text: links });
         }
@@ -1045,7 +1050,7 @@ class DatabaseView extends ItemView {
             saveAndClose(o.name).then(() => this.cleanupEditor());
           }
         });
-      }
+      });
 
       if (isMulti) {
         const doneBtn = popup.createEl("button", {

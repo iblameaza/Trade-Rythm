@@ -439,18 +439,18 @@
 .tj-dropdown-popup {
   background: var(--tj-bg);
   border: 1px solid var(--tj-border);
-  border-radius: 4px;
-  max-height: 240px;
+  border-radius: 6px;
+  max-height: 280px;
   overflow-y: auto;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+  font-size: 13px;
 }
 .tj-dropdown-item {
-  padding: 4px 8px;
+  padding: 6px 10px;
   cursor: pointer;
-  font-size: 12px;
   display: flex;
-  align-items: flex-start;
-  gap: 4px;
+  align-items: center;
+  gap: 6px;
 }
 .tj-dropdown-item:hover {
   background: var(--tj-bg-alt);
@@ -460,17 +460,20 @@
   font-weight: 600;
 }
 .tj-dd-check {
-  width: 16px;
+  width: 18px;
   flex-shrink: 0;
-  line-height: 1.4;
+  text-align: center;
 }
 .tj-dd-text {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  flex: 1;
 }
 .tj-dd-name {
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .tj-dd-links {
   font-size: 10px;
@@ -479,6 +482,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
+  margin-top: 1px;
 }
 .tj-dd-done {
   width: 100%;
