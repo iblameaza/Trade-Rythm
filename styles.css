@@ -620,18 +620,13 @@
 }
 
 /* ── Trade Edit Panel ──────────────────────────── */
-.tj-panel-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 99999;
-  background: rgba(0,0,0,0.2);
-}
 .tj-trade-panel {
   position: fixed;
-  top: 40px;
-  right: 16px;
-  width: 320px;
-  max-height: calc(100vh - 80px);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 360px;
+  max-height: 80vh;
   background: var(--tj-bg);
   border: 1px solid var(--tj-border);
   border-radius: 8px;
@@ -707,6 +702,27 @@
   max-height: 200px;
   overflow-y: auto;
   background: var(--tj-bg);
+}
+.tj-panel-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--tj-border);
+}
+.tj-panel-footer .tj-btn {
+  padding: 6px 16px;
+  font-size: 13px;
+  border-radius: 4px;
+  border: 1px solid var(--tj-border);
+  background: var(--tj-bg);
+  color: var(--tj-text);
+  cursor: pointer;
+}
+.tj-panel-footer .tj-btn-primary {
+  background: var(--tj-accent);
+  color: var(--tj-text-on-accent);
+  border-color: var(--tj-accent);
 }
 .tj-dd-item {
   padding: 6px 10px;

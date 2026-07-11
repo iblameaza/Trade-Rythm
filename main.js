@@ -495,11 +495,9 @@ class DatabaseView extends ItemView {
 
     this._onDocMouseDown = (e) => {
       const ed = this._ed;
-      if (!ed) return;
-      if (ed.overlay) {
-        if (ed.overlay.contains(e.target)) return;
-        this.cleanupEditor();
-      }
+      if (!ed || !ed.panel) return;
+      if (ed.panel.contains(e.target)) return;
+      this.cleanupEditor();
     };
     this.registerDomEvent(document, "mousedown", this._onDocMouseDown);
 
@@ -950,7 +948,7 @@ class DatabaseView extends ItemView {
   }
 
   cleanupEditor() {
-    const p = document.querySelector(".tj-panel-overlay");
+    const p = document.querySelector(".tj-trade-panel");
     if (p && p.parentNode) p.parentNode.removeChild(p);
     this._ed = null;
   }
@@ -983,11 +981,12 @@ class DatabaseView extends ItemView {
       "Order Type", "Market Conditions", "SL Management", "TP Management",
       "News Impact", "Confluences", "Key Levels", "Direction"];
 
-    const overlay = document.body.createEl("div", { cls: "tj-panel-overlay" });
-    const panel = overlay.createEl("div", { cls: "tj-trade-panel" });
-    this._ed = { overlay };
+    const pending = {};
 
-    const closePanel = () => { this.cleanupEditor(); overlay.remove(); };
+    const panel = document.body.createEl("div", { cls: "tj-trade-panel" });
+    this._ed = { panel };
+
+    const closePanel = () => { this.cleanupEditor(); panel.remove(); };
 
     const header = panel.createEl("div", { cls: "tj-panel-header" });
     header.createEl("span", { text: `Trade #${trade.tradeNum}` });
@@ -1013,19 +1012,15 @@ class DatabaseView extends ItemView {
         if (!options || options.length === 0) return;
 
         const isMulti = this.isMultiColumn(col);
-        let selected = isMulti ? current.split(",").map((s) => s.trim()).filter(Boolean) : [];
+        const displayVal = pending[col] !== undefined ? pending[col] : current;
+        let selected = isMulti ? displayVal.split(",").map((s) => s.trim()).filter(Boolean) : [];
 
         const editor = row.createEl("div", { cls: "tj-panel-editor" });
         activeEditors.add(row);
         row.addClass("tj-panel-row-open");
 
-        const saveVal = async (v) => {
-          const key = this.yamlKey(col);
-          const fm = trade.frontmatter;
-          if (isMulti) fm[key] = v.split(",").map((s) => s.trim()).filter(Boolean);
-          else fm[key] = v;
-          await this.writeFrontmatter(trade.file, fm);
-          await this.waitForMetadata(trade.file);
+        const selectVal = (v) => {
+          pending[col] = v;
           valEl.textContent = v || "—";
           editor.remove();
           activeEditors.delete(row);
@@ -1036,7 +1031,7 @@ class DatabaseView extends ItemView {
 
         options.forEach((o, i) => {
           const item = editor.createEl("div", { cls: "tj-dd-item" });
-          const isSel = isMulti ? selected.includes(o.name) : (o.name === current);
+          const isSel = isMulti ? selected.includes(o.name) : (o.name === displayVal);
           item.createEl("span", { text: isSel ? "☑ " : "☐ ", cls: "tj-dd-check" });
           const tw = item.createEl("span", { cls: "tj-dd-name", text: o.name });
           if (isSel) item.addClass("tj-dd-selected");
@@ -1057,7 +1052,7 @@ class DatabaseView extends ItemView {
               if (!doneBtn) return;
               doneBtn.dataset.val = v;
             } else {
-              saveVal(o.name);
+              selectVal(o.name);
             }
           });
         });
@@ -1071,16 +1066,34 @@ class DatabaseView extends ItemView {
           doneBtn.addEventListener("mousedown", (e) => {
             e.preventDefault();
             e.stopPropagation();
-            saveVal(doneBtn.dataset.val);
+            selectVal(doneBtn.dataset.val);
           });
         }
       });
     }
 
+    const footer = panel.createEl("div", { cls: "tj-panel-footer" });
+    const cancelBtn = footer.createEl("button", { text: "Cancel", cls: "tj-btn" });
+    const saveBtn = footer.createEl("button", { text: "Save", cls: "tj-btn tj-btn-primary" });
+
+    cancelBtn.addEventListener("click", closePanel);
+    saveBtn.addEventListener("click", async () => {
+      const fm = { ...trade.frontmatter };
+      for (const [col, val] of Object.entries(pending)) {
+        const key = this.yamlKey(col);
+        const isMulti = this.isMultiColumn(col);
+        if (isMulti) fm[key] = val.split(",").map((s) => s.trim()).filter(Boolean);
+        else fm[key] = val;
+      }
+      await this.writeFrontmatter(trade.file, fm);
+      await this.waitForMetadata(trade.file);
+      closePanel();
+    });
+
     if (focusRow) setTimeout(() => focusRow.scrollIntoView({ block: "start" }), 50);
 
     document.addEventListener("mousedown", (e) => {
-      if (!overlay.contains(e.target)) closePanel();
+      if (!panel.contains(e.target)) closePanel();
     }, { once: true });
   }
 
