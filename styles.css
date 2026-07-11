@@ -440,7 +440,7 @@
   background: var(--tj-bg);
   border: 1px solid var(--tj-border);
   border-radius: 4px;
-  max-height: 200px;
+  max-height: 240px;
   overflow-y: auto;
   box-shadow: 0 4px 12px rgba(0,0,0,0.15);
 }
@@ -449,7 +449,7 @@
   cursor: pointer;
   font-size: 12px;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 4px;
 }
 .tj-dropdown-item:hover {
@@ -462,6 +462,23 @@
 .tj-dd-check {
   width: 16px;
   flex-shrink: 0;
+  line-height: 1.4;
+}
+.tj-dd-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.tj-dd-name {
+  white-space: nowrap;
+}
+.tj-dd-links {
+  font-size: 10px;
+  color: var(--tj-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 .tj-dd-done {
   width: 100%;

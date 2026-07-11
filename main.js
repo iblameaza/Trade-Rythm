@@ -953,11 +953,34 @@ class DatabaseView extends ItemView {
     this._ed = null;
   }
 
+  async getOptionWikilinks(filePath) {
+    if (this._wikilinkCache?.[filePath]) return this._wikilinkCache[filePath];
+    try {
+      const content = await this.app.vault.adapter.read(filePath);
+      const links = [];
+      const re = /\[\[([^\]]+)\]\]/g;
+      let m;
+      while ((m = re.exec(content)) !== null) {
+        const link = m[1].split("|")[0].trim();
+        if (!links.includes(link)) links.push(link);
+      }
+      const str = links.length > 0 ? links.join(", ") : "";
+      if (!this._wikilinkCache) this._wikilinkCache = {};
+      this._wikilinkCache[filePath] = str;
+      return str;
+    } catch {
+      return "";
+    }
+  }
+
   async createInlineEditor(td, trade, col, showDropdown) {
     this.cleanupEditor();
     const current = this.getCellValue(trade, col);
     const options = await this.getSetupOptions(col);
     const isMulti = this.isMultiColumn(col);
+
+    if (!options || options.length === 0) return;
+
     td.empty();
 
     let selected = isMulti ? current.split(",").map((s) => s.trim()).filter(Boolean) : [];
@@ -977,20 +1000,32 @@ class DatabaseView extends ItemView {
       await this.waitForMetadata(trade.file);
     };
 
-    if (options && options.length > 0) {
       const rect = td.getBoundingClientRect();
       const popup = document.body.createEl("div", { cls: "tj-dropdown-popup" });
-      popup.style.cssText = `position:fixed;top:${rect.bottom + 2}px;left:${rect.left}px;width:${rect.width}px;z-index:999999;`;
+      const approxHeight = Math.min(options.length * 36 + 40, 200);
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const top = spaceBelow >= approxHeight || rect.top < approxHeight
+        ? rect.bottom + 2 : rect.top - approxHeight;
+      let left = rect.left;
+      let width = Math.max(rect.width, 180);
+      if (left + width > window.innerWidth - 8) {
+        left = Math.max(8, window.innerWidth - width - 8);
+      }
+      popup.style.cssText = `position:fixed;top:${top}px;left:${left}px;width:${width}px;z-index:999999;`;
       this._ed = { wrapper, popup, saveAndClose, selected, isMulti };
 
-      options.forEach((o) => {
+      for (const o of options) {
         const item = popup.createEl("div", { cls: "tj-dropdown-item" });
         const isSel = isMulti ? selected.includes(o.name) : (o.name === current);
-        if (isMulti) {
-          item.createEl("span", { text: isSel ? "☑ " : "☐ ", cls: "tj-dd-check" });
-        }
-        item.createEl("span", { text: o.name });
+        item.createEl("span", { text: isSel ? "☑ " : "☐ ", cls: "tj-dd-check" });
+        const textWrap = item.createEl("div", { cls: "tj-dd-text" });
+        textWrap.createEl("span", { cls: "tj-dd-name", text: o.name });
         if (isSel) item.addClass("tj-dd-selected");
+
+        const links = await this.getOptionWikilinks(o.path);
+        if (links) {
+          textWrap.createEl("span", { cls: "tj-dd-links", text: links });
+        }
 
         item.addEventListener("mousedown", (e) => {
           e.preventDefault();
@@ -1010,7 +1045,7 @@ class DatabaseView extends ItemView {
             saveAndClose(o.name).then(() => this.cleanupEditor());
           }
         });
-      });
+      }
 
       if (isMulti) {
         const doneBtn = popup.createEl("button", {
@@ -1023,23 +1058,6 @@ class DatabaseView extends ItemView {
           saveAndClose(doneBtn.dataset.val).then(() => this.cleanupEditor());
         });
       }
-    } else {
-      const input = wrapper.createEl("input", {
-        cls: "tj-inline-editor", attr: { type: "text", placeholder: "None" },
-      });
-      input.value = current;
-      input.focus();
-      input.select();
-      input.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") { saveAndClose(input.value.trim() || ""); }
-        if (e.key === "Escape") { input.blur(); }
-      });
-      document.addEventListener("mousedown", (e) => {
-        if (!wrapper.contains(e.target)) {
-          saveAndClose(input.value.trim() || "");
-        }
-      }, { once: true });
-    }
   }
 
   async writeFrontmatter(file, frontmatter) {
