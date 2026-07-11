@@ -1115,13 +1115,13 @@ class DatabaseView extends ItemView {
 
     const newLines = ["---"];
     for (const [key, val] of Object.entries(frontmatter)) {
-      const yamlKey = key.includes(":") || key.includes("/") ? `"${key}"` : key;
+      const yamlKey = JSON.stringify(key);
       if (val === null || val === undefined) {
         newLines.push(`${yamlKey}: null`);
       } else if (typeof val === "string" && val.startsWith("[[") && val.endsWith("]]")) {
         newLines.push(`${yamlKey}: ${val}`);
       } else if (typeof val === "string") {
-        newLines.push(`${yamlKey}: ${val}`);
+        newLines.push(`${yamlKey}: ${JSON.stringify(val)}`);
       } else if (typeof val === "number") {
         newLines.push(`${yamlKey}: ${val}`);
       } else if (typeof val === "boolean") {
