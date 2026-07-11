@@ -1022,6 +1022,10 @@ class DatabaseView extends ItemView {
         const selectVal = (v) => {
           pending[col] = v;
           valEl.textContent = v || "—";
+        };
+        const cancelEdit = () => {
+          delete pending[col];
+          valEl.textContent = current || "—";
           editor.remove();
           activeEditors.delete(row);
           row.removeClass("tj-panel-row-open");
@@ -1049,29 +1053,24 @@ class DatabaseView extends ItemView {
               item.toggleClass("tj-dd-selected");
               const cb = item.querySelector(".tj-dd-check");
               if (cb) cb.textContent = selected.includes(o.name) ? "☑ " : "☐ ";
-              if (!doneBtn) return;
-              doneBtn.dataset.val = v;
+              selectVal(v);
             } else {
+              editor.querySelectorAll(".tj-dd-item").forEach((el) => { el.removeClass("tj-dd-selected"); el.querySelector(".tj-dd-check").textContent = "☐ "; });
+              item.addClass("tj-dd-selected");
+              item.querySelector(".tj-dd-check").textContent = "☑ ";
               selectVal(o.name);
             }
           });
         });
 
-        let doneBtn = null;
-        if (isMulti) {
-          doneBtn = editor.createEl("button", {
-            text: "Close", cls: "tj-btn tj-btn-sm tj-btn-primary tj-dd-done",
-          });
-          doneBtn.addEventListener("mousedown", (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            delete pending[col];
-            valEl.textContent = current || "—";
-            editor.remove();
-            activeEditors.delete(row);
-            row.removeClass("tj-panel-row-open");
-          });
-        }
+        const closeBtn = editor.createEl("button", {
+          text: "Close", cls: "tj-btn tj-btn-sm tj-btn-primary tj-dd-done",
+        });
+        closeBtn.addEventListener("mousedown", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          cancelEdit();
+        });
       });
     }
 
