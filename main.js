@@ -304,9 +304,24 @@ class TradeRythmPlugin extends Plugin {
 
   // ─── Trade Folder Helpers ────────────────────
   async ensureTradeFolders() {
-    await this.ensureFolder(this.settings.tradeFolder);
-    await this.ensureFolder(this.settings.backtestFolder);
-    await this.ensureFolder(this.settings.setupFolder);
+    // Safety: only create folders if paths look correct
+    const tf = this.settings.tradeFolder;
+    const bf = this.settings.backtestFolder;
+    const sf = this.settings.setupFolder;
+    
+    if (tf && !tf.includes("Trades Journal")) {
+      console.warn("Trade Rythm: tradeFolder path does not contain 'Trades Journal':", tf);
+    }
+    if (bf && !bf.includes("Backtest Journal")) {
+      console.warn("Trade Rythm: backtestFolder path does not contain 'Backtest Journal':", bf);
+    }
+    if (sf && !sf.includes("Trading Settings") && !sf.includes("Trading Setup")) {
+      console.warn("Trade Rythm: setupFolder path does not contain 'Trading Settings':", sf);
+    }
+    
+    await this.ensureFolder(tf);
+    await this.ensureFolder(bf);
+    await this.ensureFolder(sf);
   }
 
   async detectFolderPaths() {
@@ -405,6 +420,11 @@ class TradeRythmPlugin extends Plugin {
   }
 
   async initSetupFolders() {
+    // Safety check: ensure setupFolder path looks correct
+    if (!this.settings.setupFolder.includes("Trading Settings") && !this.settings.setupFolder.includes("Trading Setup")) {
+      console.warn("Trade Rythm: setupFolder path does not contain 'Trading Settings':", this.settings.setupFolder);
+    }
+    
     for (const [key, cfg] of Object.entries(SETUP_CATEGORIES)) {
       const folderPath = this.getSetupFolderPath(key);
       await this.ensureFolder(folderPath);
