@@ -206,8 +206,7 @@ class TradeRythmPlugin extends Plugin {
       }, 0);
     const nextNum = maxNum + 1;
 
-    const suffix = isBacktest ? " (Backtest)" : "";
-    const fileName = `Trade ${nextNum}${suffix}.md`;
+    const fileName = `Trade ${nextNum}.md`;
     const filePath = `${folder}/${fileName}`;
 
     const today = new Date().toISOString().split("T")[0];

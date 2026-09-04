@@ -3,7 +3,7 @@
   "backtestFolder": "Private Github/Backtest Journal",
   "attachmentsFolder": "attachments",
   "setupFolder": "Private Github/Trading Settings",
-  "previewMode": "backtest",
+  "previewMode": "live",
   "dashboardAccount": "",
   "tableFontSize": "12",
   "columns": [
