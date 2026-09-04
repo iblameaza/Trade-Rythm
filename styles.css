@@ -745,3 +745,17 @@
   background: var(--tj-bg-alt);
   font-weight: 600;
 }
+
+/* ── Settings Notice ────────────────────────────── */
+.tj-settings-notice {
+  background: var(--tj-bg-alt);
+  border: 1px solid var(--tj-border);
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+.tj-settings-notice-text {
+  margin: 0;
+  font-size: 13px;
+  color: var(--tj-text-muted);
+}

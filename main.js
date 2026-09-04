@@ -30,10 +30,10 @@ const SETUP_CATEGORIES = {
 };
 
 const DEFAULT_SETTINGS = {
-  tradeFolder: "Private Github/\ufe31 Trades Journal",
-  backtestFolder: "Private Github/\ufe31 Backtest Journal",
+  tradeFolder: "Private Github/Trades Journal",
+  backtestFolder: "Private Github/Backtest Journal",
   attachmentsFolder: "attachments",
-  setupFolder: "Private Github/\ufe31 Trading Settings",
+  setupFolder: "Private Github/Trading Settings",
   previewMode: "live",
   dashboardAccount: "",
   tableFontSize: "12",
@@ -42,48 +42,49 @@ const DEFAULT_SETTINGS = {
     "Entry Signal", "Market Conditions", "Key Levels", "Confluences",
     "Session", "Model", "Bias", "Order Type", "S/L Pips", "% Risk",
     "Status", "Entry / Exit Date",
-    "Gross PnL", "Setup Grade", "SL Management", "TP Management",
+    "Gross PnL", "Net PnL", "Setup Grade", "SL Management", "TP Management",
     "Max RR reached", "Actual RR achieved: W(+1), L(-1), BE(0)",
-    "Fees", "News Impact", "Mistakes", "Bias Review",
+    "Outcome", "#Hour", "#Day", "#Month", "#Year", "#Duration in Minutes",
+    "Backtest?", "Fees", "News Impact", "Mistakes", "Bias Review",
     "Entry Performance", "Psychology Tracker", "LeaderBoard",
     "Weekly Report", "Tradingview Chart",
     "Entry / Exit Date (end)", "No-Explanation?"
   ],
   templateYaml: [
-    'Symbol: ',
-    'Position: ',
-    'Account: ',
-    'Type of Trade: ',
-    'Entry TimeFrame: ',
-    'Entry Signal: ',
-    'Market Conditions: ',
-    'Key Levels: ',
-    'Confluences: ',
-    'Session: ',
-    'Model: ',
-    'Bias: ',
-    'Order Type: ',
-    '"S/L Pips": ',
-    '"% Risk": ',
-    'Status: Open',
+    '"Position": "Buy / Sell"',
+    '"Symbol": ""',
+    '"Model": ""',
+    '"Account": ""',
+    '"Session": ""',
+    '"Status": "Open / Closed"',
+    '"Gross PnL": 0',
+    '"Setup Grade": ""',
+    '"Order Type": ""',
+    '"Type of Trade": ""',
+    '"Entry TimeFrame": ""',
+    '"Entry Signal": ""',
+    '"Bias": ""',
+    '"Bias Review": ""',
+    '"Confluences": ""',
+    '"Key Levels": ""',
+    '"SL Management": ""',
+    '"TP Management": ""',
+    '"Mistakes": ""',
+    '"Market Conditions": ""',
+    '"News Impact": ""',
+    '"Entry Performance": ""',
+    '"LeaderBoard": ""',
+    '"Psychology Tracker": ""',
+    '"Weekly Report": ""',
+    '"S/L Pips": 0',
+    '"Fees": 0',
+    '"% Risk": 0',
+    '"Max RR reached": 0',
+    '"Actual RR achieved": "W(+1), L(-1), BE(0)"',
     '"Entry / Exit Date": "{{date}}"',
-    'Gross PnL: ',
-    'Setup Grade: ',
-    'SL Management: ',
-    'TP Management: ',
-    'Max RR reached: ',
-    '"Actual RR achieved: W(+1), L(-1), BE(0)": ',
-    'Fees: ',
-    'News Impact: ',
-    'Mistakes: ',
-    'Bias Review: ',
-    'Entry Performance: ',
-    'Psychology Tracker: ',
-    'LeaderBoard: ',
-    'Weekly Report: ',
-    'Tradingview Chart: ',
-    '"Entry / Exit Date (end)": ',
-    'No-Explanation?: false',
+    '"Entry / Exit Date (end)": null',
+    '"No-Explanation?": false',
+    '"Tradingview Chart": ""',
   ]
 };
 
@@ -98,27 +99,25 @@ class TradeRythmPlugin extends Plugin {
     new Notice("Trade Rythm: loading...");
     console.log("Trade Rythm plugin loading...");
     await this.loadSettings();
+
+    // Auto-create trade and backtest folders
+    await this.ensureTradeFolders();
+
+    // Detect and update folder paths if renamed
+    await this.detectFolderPaths();
+
     try {
       await this.initSetupFolders();
     } catch (e) {
       console.error("Trade Rythm initSetupFolders error:", e);
     }
-    // migrate old "Trading Setup" → "Trading Settings"
-    try {
-      const newPath = this.settings.setupFolder.replace("Trading Setup", "Trading Settings");
-      if (this.settings.setupFolder !== newPath) {
-        if (await this.app.vault.adapter.exists(this.settings.setupFolder)) {
-          const oldFolder = this.app.vault.getAbstractFileByPath(this.settings.setupFolder);
-          if (oldFolder) {
-            await this.app.vault.rename(oldFolder, newPath);
-            console.log("Migrated Trading Setup → Trading Settings");
-          }
-        }
-        this.settings.setupFolder = newPath;
-        await this.saveSettings();
-      }
-    } catch (e) {
-      console.log("Trade Rythm: setup folder migration skipped:", e.message);
+
+    // Show welcome message on first install
+    const isFirstInstall = !this.settings._installed;
+    if (isFirstInstall) {
+      this.settings._installed = true;
+      await this.saveSettings();
+      new Notice("Trade Rythm: Welcome! I've created your trading folders. You can customize them in Settings.", 5000);
     }
 
     this.addRibbonIcon("dollar-sign", "Trade Rythm", () => this.activateView());
@@ -201,6 +200,39 @@ class TradeRythmPlugin extends Plugin {
       l.replace("{{date}}", today)
     );
 
+    // Generic checklist template (user can customize via settings)
+    const preTradeChecklist = [
+      "News & Key events",
+      "Define Actual Price Action & Bias by marking Prominent Highs & Lows on HTF",
+      "Review all mistakes from the past",
+      "Check if price hit specific Confluences & if respected"
+    ];
+    const preMarketChecklist = [
+      "1h, 30m, 15m Confluence and Analysis move | TRACK THEM",
+      "Match with Previous Trend / Bias on LTF & HTF",
+      "Check today's market news & key events",
+      "Stay focused — no distractions, be completely in the chart",
+      "Review necessary reference material + past trades",
+      "Define High Timeframe (D, 4H) Bias as overview ONLY"
+    ];
+    const entryRules = [
+      "Massive LQ on HTF on opposite direction",
+      "Wait for LQ to end moves (usually on manipulation session)",
+      "Confluences (additional)",
+      "LTF LQ that ended with HTF LQ already",
+      "Bias & HTF Price action must be confirmed again",
+      "BOS",
+      "Respected OB",
+      "Liquidity Sweeps"
+    ];
+    const exitRules = [
+      "Confluences that match Bias",
+      "Forming AR LQ to opposite direction",
+      "Liquidity / OB / FVG"
+    ];
+
+    const buildChecklist = (items) => items.map((i) => `- [ ] ${i}`).join("\n");
+
     const body = [
       "---",
       ...yamlLines,
@@ -208,36 +240,32 @@ class TradeRythmPlugin extends Plugin {
       "",
       "> [!note] Before Trading",
       ">",
-      "> _Market context, key levels, bias, confluences..._",
+      "> ### Pre-Trade Checklist",
+      "> " + buildChecklist(preTradeChecklist).replace(/\n/g, "\n> "),
+      "> ### Pre-Market Checklist",
+      "> " + buildChecklist(preMarketChecklist).replace(/\n/g, "\n> "),
       ">",
-      "> - Bias / Direction:",
-      "> - Key Levels:",
-      "> - Market Conditions:",
-      "> - Confluences:",
+      "> ### Entry Rules",
+      "> " + buildChecklist(entryRules).replace(/\n/g, "\n> "),
       "",
       "> [!note] During Trading",
       ">",
-      "> _How did the trade unfold? Entry, management, emotions..._",
-      ">",
-      "> - Entry Signal / Execution:",
-      "> - TP / SL Management:",
-      "> - Emotions During Trade:",
+      "> ### Exit Rules",
+      "> " + buildChecklist(exitRules).replace(/\n/g, "\n> "),
+      "> ### Why I Took This Trade",
+      "> - ",
+      "",
+      "### Trade Timeline",
+      "| Time | Action | Reason | Emotion | Stress | Confidence | Screenshot |",
+      "|------|--------|--------|---------|--------|------------|------------|",
+      "|      |        |        |         |        |            |            |",
       "",
       "> [!note] After Trading",
       ">",
-      "> _Outcome, lessons learned, mistakes to improve..._",
-      ">",
-      "> - Outcome:",
-      "> - Mistakes Made:",
-      "> - Lessons Learned:",
-      "",
-      "> [!faq]- Summary Template",
-      ">",
-      "> - [ ] Entry Signal Quality",
-      "> - [ ] Risk Management Followed",
-      "> - [ ] Trade Plan Adhered To",
-      "> - [ ] Emotions Under Control",
-      "> - [ ] Lesson Documented",
+      "> ### After-Action Report",
+      "> - ",
+      "> ### Lesson Learned",
+      "> - ",
       "",
       "---",
       "",
@@ -272,6 +300,46 @@ class TradeRythmPlugin extends Plugin {
     this.app.workspace.getLeavesOfType(VIEW_TYPE).forEach((l) => {
       if (l.view instanceof DatabaseView) l.view.render();
     });
+  }
+
+  // ─── Trade Folder Helpers ────────────────────
+  async ensureTradeFolders() {
+    await this.ensureFolder(this.settings.tradeFolder);
+    await this.ensureFolder(this.settings.backtestFolder);
+    await this.ensureFolder(this.settings.setupFolder);
+  }
+
+  async detectFolderPaths() {
+    try {
+      // Scan for renamed folders and update settings if needed
+      const pgPath = "Private Github";
+      const entries = await this.app.vault.adapter.list(pgPath);
+      
+      for (const entry of entries.folders) {
+        const folderName = entry.split("/").pop();
+        
+        // Check for common renames
+        if (folderName.includes("Trades Journal") && !this.settings.tradeFolder.includes(folderName)) {
+          this.settings.tradeFolder = `${pgPath}/${folderName}`;
+          await this.saveSettings();
+          console.log(`Trade Rythm: Updated trades folder to ${folderName}`);
+        }
+        
+        if (folderName.includes("Backtest Journal") && !this.settings.backtestFolder.includes(folderName)) {
+          this.settings.backtestFolder = `${pgPath}/${folderName}`;
+          await this.saveSettings();
+          console.log(`Trade Rythm: Updated backtest folder to ${folderName}`);
+        }
+        
+        if (folderName.includes("Trading Settings") && !this.settings.setupFolder.includes(folderName)) {
+          this.settings.setupFolder = `${pgPath}/${folderName}`;
+          await this.saveSettings();
+          console.log(`Trade Rythm: Updated setup folder to ${folderName}`);
+        }
+      }
+    } catch (e) {
+      console.log("Trade Rythm: folder detection skipped:", e.message);
+    }
   }
 
   // ─── Setup Folder Helpers ────────────────────
@@ -567,18 +635,38 @@ class DatabaseView extends ItemView {
 
       const tradeName = file.basename.replace(/#/g, "");
       const tradeNum = parseInt(file.basename.match(/\d+/)?.[0]) || 0;
+      const grossPnl = fm["Gross PnL"] !== undefined ? fm["Gross PnL"] : null;
+      const fees = fm.Fees !== undefined ? fm.Fees : 0;
+      const dateStr = fm["Entry / Exit Date"] || "";
+      const dateStart = dateStr ? new Date(dateStr) : null;
+      const dateEnd = fm["Entry / Exit Date (end)"] ? new Date(fm["Entry / Exit Date (end)"]) : dateStart;
+      const maxRr = fm["Max RR reached"] !== undefined ? fm["Max RR reached"] : null;
+      const actualRr = fm["Actual RR achieved: W(+1), L(-1), BE(0)"] !== undefined ? fm["Actual RR achieved: W(+1), L(-1), BE(0)"] : null;
+      const slPips = fm["S/L Pips"] !== undefined ? fm["S/L Pips"] : null;
+
+      const netPnl = grossPnl !== null && grossPnl !== undefined ? grossPnl - fees : null;
+      const outcome = this.computeOutcome(grossPnl, fees, maxRr, actualRr);
+      const hour = dateStart ? dateStart.getHours() : null;
+      const day = dateStart ? dateStart.toLocaleDateString("en-US", { weekday: "long" }) : null;
+      const month = dateStart ? dateStart.toLocaleDateString("en-US", { month: "long" }) : null;
+      const year = dateStart ? dateStart.getFullYear() : null;
+      const durationMinutes = (dateStart && dateEnd) ? Math.round((dateEnd - dateStart) / 60000) : null;
+      const backtestFlag = fm.Account === "FX replay Backtest" || fm.Backtest === true;
+
       this.trades.push({
         file,
         name: tradeName,
         tradeNum,
         isBacktest,
         frontmatter: fm,
-        date: fm["Entry / Exit Date"] || "",
+        date: dateStr,
         symbol: fm.Symbol ? this.stripWiki(fm.Symbol) : "",
         model: fm.Model ? this.stripWiki(fm.Model) : "",
         direction: fm.Position || "",
         status: fm.Status || "",
-        pnl: fm["Gross PnL"] !== undefined ? fm["Gross PnL"] : null,
+        pnl: grossPnl,
+        netPnl,
+        fees,
         session: fm.Session ? this.stripWiki(fm.Session) : "",
         setupGrade: fm["Setup Grade"] ? this.stripWiki(fm["Setup Grade"]) : "",
         account: fm.Account ? this.stripWiki(fm.Account) : "",
@@ -595,6 +683,16 @@ class DatabaseView extends ItemView {
         mistakesStr: this.parseListStr(fm.Mistakes),
         confluencesStr: this.parseListStr(fm.Confluences),
         keyLevelsStr: this.parseListStr(fm["Key Levels"]),
+        outcome,
+        hour,
+        day,
+        month,
+        year,
+        durationMinutes,
+        backtestFlag,
+        maxRr,
+        actualRr,
+        slPips,
       });
     }
   }
@@ -613,6 +711,20 @@ class DatabaseView extends ItemView {
 
   parseListStr(val) {
     return this.parseList(val).join(", ");
+  }
+
+  computeOutcome(gross, fees, maxRr, actualRr) {
+    if (gross === null || gross === undefined) return "?? Capital Protected";
+    const net = gross - (fees || 0);
+    if (net > 0 && maxRr && actualRr !== null && actualRr !== undefined && maxRr > 0 && net / maxRr >= 0.9) return "?? Maximum Profit!";
+    if (net > 0 && maxRr && actualRr !== null && actualRr !== undefined && maxRr > 0 && net / maxRr >= 0.6) return "?? Great Exit!";
+    if (net > 0) return "?? Profit Taken";
+    if (net < 0 && maxRr && actualRr !== null && actualRr !== undefined && maxRr > 0 && actualRr > 0) return "?? Winning Trade Turned Loser";
+    if (net < 0) return "?? Loss, Review Setup";
+    if (net === 0 && maxRr && actualRr !== null && actualRr !== undefined && maxRr > 0 && actualRr > 0 && fees > 0) return "?? Winner to BE but Fees Lost";
+    if (net === 0 && maxRr && actualRr !== null && actualRr !== undefined && maxRr > 0 && actualRr > 0) return "?? Winner to Breakeven";
+    if (net === 0 && maxRr && actualRr !== null && actualRr !== undefined && maxRr > 0 && fees > 0) return "?? Breakeven but Fees Lost";
+    return "?? Capital Protected";
   }
 
   async applyFilters() {
@@ -868,6 +980,7 @@ class DatabaseView extends ItemView {
       Direction: "direction",
       Status: "status",
       "Gross PnL": "pnl",
+      "Net PnL": "netPnl",
       Session: "session",
       "Setup Grade": "setupGrade",
       Account: "account",
@@ -881,6 +994,13 @@ class DatabaseView extends ItemView {
       Mistakes: "mistakesStr",
       Confluences: "confluencesStr",
       "Key Levels": "keyLevelsStr",
+      Outcome: "outcome",
+      "#Hour": "hour",
+      "#Day": "day",
+      "#Month": "month",
+      "#Year": "year",
+      "#Duration in Minutes": "durationMinutes",
+      "Backtest?": "backtestFlag",
     };
     return map[col] || col;
   }
@@ -893,6 +1013,7 @@ class DatabaseView extends ItemView {
       case "Direction": return trade.direction;
       case "Status": return trade.status;
       case "Gross PnL": return trade.pnl;
+      case "Net PnL": return trade.netPnl;
       case "Session": return trade.session;
       case "Setup Grade": return trade.setupGrade;
       case "Account": return trade.account;
@@ -906,6 +1027,13 @@ class DatabaseView extends ItemView {
       case "Mistakes": return trade.mistakesStr;
       case "Confluences": return trade.confluencesStr;
       case "Key Levels": return trade.keyLevelsStr;
+      case "Outcome": return trade.outcome || "";
+      case "#Hour": return trade.hour !== null ? String(trade.hour) : "";
+      case "#Day": return trade.day || "";
+      case "#Month": return trade.month || "";
+      case "#Year": return trade.year !== null ? String(trade.year) : "";
+      case "#Duration in Minutes": return trade.durationMinutes !== null ? String(trade.durationMinutes) : "";
+      case "Backtest?": return trade.backtestFlag ? "Yes" : "No";
       default: {
         const fm = trade.frontmatter;
         const raw = fm[col];
@@ -1238,19 +1366,43 @@ class DatabaseView extends ItemView {
     const closed = this.filteredTrades.filter((t) => t.status === "Closed");
     const all = this.filteredTrades;
 
-    const netPnl = closed.reduce((s, t) => s + (t.pnl ?? 0), 0);
-    const wins = closed.filter((t) => t.pnl > 0);
-    const losses = closed.filter((t) => t.pnl < 0);
+    const netPnl = closed.reduce((s, t) => s + (t.netPnl ?? 0), 0);
+    const grossPnl = closed.reduce((s, t) => s + (t.pnl ?? 0), 0);
+    const wins = closed.filter((t) => (t.netPnl ?? 0) > 0);
+    const losses = closed.filter((t) => (t.netPnl ?? 0) < 0);
+    const bes = closed.filter((t) => (t.netPnl ?? 0) === 0);
     const winRate = closed.length > 0 ? (wins.length / closed.length) * 100 : 0;
-    const best = closed.length > 0 ? Math.max(...closed.map((t) => t.pnl ?? 0)) : 0;
-    const worst = closed.length > 0 ? Math.min(...closed.map((t) => t.pnl ?? 0)) : 0;
+    const best = closed.length > 0 ? Math.max(...closed.map((t) => t.netPnl ?? 0)) : 0;
+    const worst = closed.length > 0 ? Math.min(...closed.map((t) => t.netPnl ?? 0)) : 0;
+
+    const grossRrs = closed.filter((t) => t.maxRr !== null && t.maxRr !== undefined && t.maxRr > 0).map((t) => t.maxRr);
+    const actualRrs = closed.filter((t) => t.actualRr !== null && t.actualRr !== undefined).map((t) => t.actualRr);
+    const avgRr = grossRrs.length > 0 ? grossRrs.reduce((s, v) => s + v, 0) / grossRrs.length : 0;
+    const totalRr = grossRrs.reduce((s, v) => s + v, 0);
+    const mostRr = grossRrs.length > 0 ? Math.max(...grossRrs) : 0;
+    const capturedRr = (totalRr > 0 && actualRrs.length > 0) ? (actualRrs.reduce((s, v) => s + v, 0) / totalRr) * 100 : 0;
+
+    const beCount = bes.length;
+    const maxStreak = this.computeMaxStreak(closed);
+    const durations = closed.filter((t) => t.durationMinutes !== null && t.durationMinutes !== undefined).map((t) => t.durationMinutes);
+    const avgDuration = durations.length > 0 ? durations.reduce((s, v) => s + v, 0) / durations.length : 0;
+    const slPipsArr = closed.filter((t) => t.slPips !== null && t.slPips !== undefined).map((t) => t.slPips);
+    const avgSlPips = slPipsArr.length > 0 ? slPipsArr.reduce((s, v) => s + v, 0) / slPipsArr.length : 0;
 
     const dash = this.contentEl.createEl("div", { cls: "tj-dashboard" });
 
     const cards = dash.createEl("div", { cls: "tj-dash-cards" });
     this.dashCard(cards, "Total Trades", String(all.length), "");
     this.dashCard(cards, "Net PnL", `$${netPnl.toFixed(2)}`, netPnl >= 0 ? "tj-pnl-positive" : "tj-pnl-negative");
+    this.dashCard(cards, "Gross PnL", `$${grossPnl.toFixed(2)}`, grossPnl >= 0 ? "tj-pnl-positive" : "tj-pnl-negative");
     this.dashCard(cards, "Win Rate", `${winRate.toFixed(1)}%`, winRate >= 50 ? "tj-pnl-positive" : "tj-pnl-negative");
+    this.dashCard(cards, "Avg R/R", avgRr.toFixed(2), "");
+    this.dashCard(cards, "Total R/R", totalRr.toFixed(2), "");
+    this.dashCard(cards, "Most R/R", mostRr.toFixed(2), "");
+    this.dashCard(cards, "Captured R/R %", `${capturedRr.toFixed(1)}%`, "");
+    this.dashCard(cards, "W/L/BE Streak", maxStreak > 0 ? `> ${maxStreak}` : "—", "");
+    this.dashCard(cards, "Avg Duration", durations.length > 0 ? `${Math.round(avgDuration)}m` : "—", "");
+    this.dashCard(cards, "Avg S/L Pips", slPipsArr.length > 0 ? Math.round(avgSlPips).toString() : "—", "");
     this.dashCard(cards, "Best Trade", `$${best.toFixed(2)}`, "tj-pnl-positive");
     this.dashCard(cards, "Worst Trade", `$${worst.toFixed(2)}`, "tj-pnl-negative");
 
@@ -1261,6 +1413,26 @@ class DatabaseView extends ItemView {
     this.renderGroupBreakdown(dash, "PnL by Model", closed, "model");
     this.renderGroupBreakdown(dash, "PnL by Symbol", closed, "symbol");
     this.renderGroupBreakdown(dash, "PnL by Session", closed, "session");
+    this.renderGroupBreakdown(dash, "PnL by Timeframe", closed, "entryTimeframe");
+    this.renderGroupBreakdown(dash, "PnL by Mistake", closed, "mistakesStr");
+  }
+
+  computeMaxStreak(trades) {
+    let maxStreak = 0, currentStreak = 0, currentType = null;
+    for (const t of trades) {
+      let type = "BE";
+      const net = t.netPnl ?? 0;
+      if (net > 0) type = "W";
+      else if (net < 0) type = "L";
+      if (type === currentType) {
+        currentStreak++;
+      } else {
+        currentStreak = 1;
+        currentType = type;
+      }
+      if (currentStreak > maxStreak) maxStreak = currentStreak;
+    }
+    return maxStreak;
   }
 
   renderDrawdownChart(parent, trades) {
@@ -1484,6 +1656,13 @@ class TradeRythmSettingsTab extends PluginSettingTab {
 
     containerEl.createEl("h2", { text: "Trade Rythm Settings" });
 
+    // Show folder creation notice
+    const noticeDiv = containerEl.createEl("div", { cls: "tj-settings-notice" });
+    noticeDiv.createEl("p", {
+      text: "Trade Rythm will automatically create and manage these folders for your trading setup.",
+      cls: "tj-settings-notice-text"
+    });
+
     new Setting(containerEl)
       .setName("Trades folder")
       .setDesc("Vault-relative path to live trades")
@@ -1493,6 +1672,7 @@ class TradeRythmSettingsTab extends PluginSettingTab {
           .onChange(async (v) => {
             this.plugin.settings.tradeFolder = v;
             await this.plugin.saveSettings();
+            await this.plugin.ensureTradeFolders();
           })
       );
 
@@ -1505,6 +1685,7 @@ class TradeRythmSettingsTab extends PluginSettingTab {
           .onChange(async (v) => {
             this.plugin.settings.backtestFolder = v;
             await this.plugin.saveSettings();
+            await this.plugin.ensureTradeFolders();
           })
       );
 
