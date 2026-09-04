@@ -100,24 +100,39 @@ class TradeRythmPlugin extends Plugin {
     console.log("Trade Rythm plugin loading...");
     await this.loadSettings();
 
-    // Auto-create trade and backtest folders
-    await this.ensureTradeFolders();
-
-    // Detect and update folder paths if renamed
-    await this.detectFolderPaths();
-
-    try {
-      await this.initSetupFolders();
-    } catch (e) {
-      console.error("Trade Rythm initSetupFolders error:", e);
-    }
-
     // Show welcome message on first install
     const isFirstInstall = !this.settings._installed;
     if (isFirstInstall) {
-      this.settings._installed = true;
-      await this.saveSettings();
-      new Notice("Trade Rythm: Welcome! I've created your trading folders. You can customize them in Settings.", 5000);
+      // Ask user consent before creating folders
+      const tradeExists = await this.app.vault.adapter.exists(this.settings.tradeFolder);
+      const backtestExists = await this.app.vault.adapter.exists(this.settings.backtestFolder);
+      const setupExists = await this.app.vault.adapter.exists(this.settings.setupFolder);
+      
+      if (!tradeExists || !backtestExists || !setupExists) {
+        // Show confirmation modal
+        new ConfirmModal(
+          this.app,
+          "Trade Rythm Setup",
+          "Trade Rythm needs to create trading folders in your vault:\n\n" +
+          `- ${this.settings.tradeFolder}\n` +
+          `- ${this.settings.backtestFolder}\n` +
+          `- ${this.settings.setupFolder}\n\n` +
+          "Create these folders?",
+          async () => {
+            await this.ensureTradeFolders();
+            await this.initSetupFolders();
+            this.settings._installed = true;
+            await this.saveSettings();
+            new Notice("Trade Rythm: Folders created successfully!");
+          },
+          () => {
+            new Notice("Trade Rythm: Skipped folder creation. You can create them manually in Settings.");
+          }
+        ).open();
+      } else {
+        this.settings._installed = true;
+        await this.saveSettings();
+      }
     }
 
     this.addRibbonIcon("dollar-sign", "Trade Rythm", () => this.activateView());
@@ -366,6 +381,13 @@ class TradeRythmPlugin extends Plugin {
   async ensureFolder(path) {
     try {
       if (await this.app.vault.adapter.exists(path)) return;
+      // Check if parent folder exists before creating
+      const parts = path.split("/");
+      const parentPath = parts.slice(0, -1).join("/");
+      if (parentPath && !(await this.app.vault.adapter.exists(parentPath))) {
+        console.warn(`Trade Rythm: parent folder does not exist: ${parentPath}. Not creating ${path}`);
+        return;
+      }
       await this.app.vault.createFolder(path);
     } catch (e) {
       console.error(`Trade Rythm ensureFolder error for "${path}":`, e);
@@ -1555,6 +1577,42 @@ class DatabaseView extends ItemView {
   }
 }
 
+// ─── Confirm Modal ──────────────────────────────────────
+class ConfirmModal extends Modal {
+  constructor(app, title, message, onConfirm, onCancel) {
+    super(app);
+    this.title = title;
+    this.message = message;
+    this.onConfirm = onConfirm;
+    this.onCancel = onCancel;
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.addClass("tj-modal");
+
+    contentEl.createEl("h2", { text: this.title });
+    contentEl.createEl("p", { text: this.message });
+
+    const btns = contentEl.createEl("div", { cls: "tj-modal-btns" });
+    btns.createEl("button", { text: "Cancel", cls: "tj-btn" })
+      .addEventListener("click", () => {
+        this.close();
+        if (this.onCancel) this.onCancel();
+      });
+    btns.createEl("button", { text: "Create", cls: "tj-btn tj-btn-primary" })
+      .addEventListener("click", async () => {
+        this.close();
+        if (this.onConfirm) await this.onConfirm();
+      });
+  }
+
+  onClose() {
+    this.contentEl.empty();
+  }
+}
+
 // ─── Setup Modal ───────────────────────────────────────
 class SettingsModal extends Modal {
   constructor(app, plugin) {
@@ -1692,7 +1750,6 @@ class TradeRythmSettingsTab extends PluginSettingTab {
           .onChange(async (v) => {
             this.plugin.settings.tradeFolder = v;
             await this.plugin.saveSettings();
-            await this.plugin.ensureTradeFolders();
           })
       );
 
@@ -1705,7 +1762,6 @@ class TradeRythmSettingsTab extends PluginSettingTab {
           .onChange(async (v) => {
             this.plugin.settings.backtestFolder = v;
             await this.plugin.saveSettings();
-            await this.plugin.ensureTradeFolders();
           })
       );
 
@@ -1718,7 +1774,43 @@ class TradeRythmSettingsTab extends PluginSettingTab {
           .onChange(async (v) => {
             this.plugin.settings.setupFolder = v;
             await this.plugin.saveSettings();
-            await this.plugin.initSetupFolders();
+          })
+      );
+
+    // Save & Create Folders button
+    new Setting(containerEl)
+      .setName("Create folders")
+      .setDesc("Create or verify all trading folders based on the paths above")
+      .addButton((btn) =>
+        btn
+          .setButtonText("Create Folders")
+          .setCta()
+          .onClick(async () => {
+            const tradeExists = await this.app.vault.adapter.exists(this.plugin.settings.tradeFolder);
+            const backtestExists = await this.app.vault.adapter.exists(this.plugin.settings.backtestFolder);
+            const setupExists = await this.app.vault.adapter.exists(this.plugin.settings.setupFolder);
+            
+            const missing = [];
+            if (!tradeExists) missing.push(this.plugin.settings.tradeFolder);
+            if (!backtestExists) missing.push(this.plugin.settings.backtestFolder);
+            if (!setupExists) missing.push(this.plugin.settings.setupFolder);
+            
+            if (missing.length === 0) {
+              new Notice("Trade Rythm: All folders already exist!");
+              return;
+            }
+            
+            new ConfirmModal(
+              this.app,
+              "Create Folders",
+              "Create these folders?\n\n" + missing.join("\n"),
+              async () => {
+                await this.plugin.ensureTradeFolders();
+                await this.plugin.initSetupFolders();
+                new Notice("Trade Rythm: Folders created successfully!");
+                this.display(); // Refresh settings
+              }
+            ).open();
           })
       );
 
