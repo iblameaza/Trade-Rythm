@@ -87,7 +87,6 @@ const DEFAULT_SETTINGS = {
   ],
   templateChecklists: {
     preTrade: [],
-    preMarket: [],
     entryRules: [],
     exitRules: []
   }
@@ -236,9 +235,6 @@ class TradeRythmPlugin extends Plugin {
       "> ### Pre-Trade Checklist",
       formatChecklist(ct.preTrade),
       "> ",
-      "> ### Pre-Market Checklist",
-      formatChecklist(ct.preMarket),
-      "> ",
       "> ### Entry Rules",
       formatChecklist(ct.entryRules),
       "",
@@ -253,6 +249,14 @@ class TradeRythmPlugin extends Plugin {
       formatChecklist(ct.exitRules),
       "> ",
       "> ### After-Action Report",
+      "> ",
+      "> #### ✅ What Went Well",
+      "> - ",
+      "> ",
+      "> #### ❌ What Went Wrong",
+      "> - ",
+      "> ",
+      "> #### ➡️ Actionable Improvements",
       "> - ",
       "> ",
       "> ### Lesson Learned",
@@ -1600,7 +1604,6 @@ class GuideModal extends Modal {
         content: [
           "Go to Settings → Checklist Templates to configure your defaults.",
           "Pre-Trade Checklist: Your pre-trade routine (e.g., check news, define bias).",
-          "Pre-Market Checklist: Your market open routine.",
           "Entry Rules: Your criteria for entering a position.",
           "Exit Rules: Your criteria for taking profit or cutting losses.",
           "Click '+' to add items, '✕' to remove.",
@@ -1611,7 +1614,6 @@ class GuideModal extends Modal {
         title: "Checklists (In Trade)",
         content: [
           "Pre-Trade Checklist: Run before entering any trade.",
-          "Pre-Market Checklist: Run at market open.",
           "Entry Rules: Your criteria for entering a position.",
           "Exit Rules: Your criteria for taking profit or cutting losses.",
           "Edit these in each trade file to match your trading plan."
@@ -1744,10 +1746,9 @@ class SettingsModal extends Modal {
     ctSec.createEl("h3", { text: "Checklist Templates" });
     ctSec.createEl("p", { text: "Add checklist items for new trades. Each item becomes a checkbox.", cls: "setting-item-description" });
 
-    const ct = this.plugin.settings.templateChecklists || { preTrade: [], preMarket: [], entryRules: [], exitRules: [] };
+    const ct = this.plugin.settings.templateChecklists || { preTrade: [], entryRules: [], exitRules: [] };
     const checklistFields = [
       { key: "preTrade", label: "Pre-Trade Checklist" },
-      { key: "preMarket", label: "Pre-Market Checklist" },
       { key: "entryRules", label: "Entry Rules" },
       { key: "exitRules", label: "Exit Rules" }
     ];
@@ -1767,7 +1768,7 @@ class SettingsModal extends Modal {
           items.splice(idx, 1);
           this.plugin.settings.templateChecklists[field.key] = items;
           await this.plugin.saveSettings();
-          this.onOpen();
+          li.remove();
         });
       });
 
