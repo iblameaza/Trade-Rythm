@@ -86,13 +86,10 @@ const DEFAULT_SETTINGS = {
     '"Weekly Report": ""',
   ],
   templateChecklists: {
-    preTrade: "",
-    preMarket: "",
-    entryRules: "",
-    exitRules: "",
-    whyTrade: "",
-    afterAction: "",
-    lesson: ""
+    preTrade: [],
+    preMarket: [],
+    entryRules: [],
+    exitRules: []
   }
 };
 
@@ -224,14 +221,9 @@ class TradeRythmPlugin extends Plugin {
 
     // Use checklist templates from settings
     const ct = this.settings.templateChecklists || {};
-    const c = {
-      preTrade: ct.preTrade || "- [ ] ",
-      preMarket: ct.preMarket || "- [ ] ",
-      entryRules: ct.entryRules || "- [ ] ",
-      exitRules: ct.exitRules || "- [ ] ",
-      whyTrade: ct.whyTrade || "- ",
-      afterAction: ct.afterAction || "- ",
-      lesson: ct.lesson || "- "
+    const formatChecklist = (items) => {
+      if (!items || items.length === 0) return "> - [ ] ";
+      return items.map((item) => `> - [ ] ${item}`).join("\n");
     };
 
     const body = [
@@ -241,26 +233,30 @@ class TradeRythmPlugin extends Plugin {
       "",
       "> [!note] Before Trading",
       "> ",
-      "### Pre-Trade Checklist",
-      c.preTrade,
-      "### Pre-Market Checklist",
-      c.preMarket,
-      "### Entry Rules",
-      c.entryRules,
+      "> ### Pre-Trade Checklist",
+      formatChecklist(ct.preTrade),
+      "> ",
+      "> ### Pre-Market Checklist",
+      formatChecklist(ct.preMarket),
+      "> ",
+      "> ### Entry Rules",
+      formatChecklist(ct.entryRules),
       "",
       "> [!note] During Trading",
       "> ",
-      "### Why I Took This Trade",
-      c.whyTrade,
+      "> ### Why I Took This Trade",
+      "> - ",
       "",
       "> [!note] After Trading",
       "> ",
-      "### Exit Rules",
-      c.exitRules,
-      "### After-Action Report",
-      c.afterAction,
-      "### Lesson Learned",
-      c.lesson,
+      "> ### Exit Rules",
+      formatChecklist(ct.exitRules),
+      "> ",
+      "> ### After-Action Report",
+      "> - ",
+      "> ",
+      "> ### Lesson Learned",
+      "> - ",
       "",
       "---",
       "",
@@ -1600,7 +1596,19 @@ class GuideModal extends Modal {
         ]
       },
       {
-        title: "Checklists",
+        title: "Checklist Templates (Settings)",
+        content: [
+          "Go to Settings → Checklist Templates to configure your defaults.",
+          "Pre-Trade Checklist: Your pre-trade routine (e.g., check news, define bias).",
+          "Pre-Market Checklist: Your market open routine.",
+          "Entry Rules: Your criteria for entering a position.",
+          "Exit Rules: Your criteria for taking profit or cutting losses.",
+          "Click '+' to add items, '✕' to remove.",
+          "New trades automatically use these templates."
+        ]
+      },
+      {
+        title: "Checklists (In Trade)",
         content: [
           "Pre-Trade Checklist: Run before entering any trade.",
           "Pre-Market Checklist: Run at market open.",
@@ -1613,7 +1621,6 @@ class GuideModal extends Modal {
         title: "During Trading",
         content: [
           "Why I Took This Trade: Document your reasoning.",
-          "Trade Timeline: Log actions as you manage the trade.",
           "Screenshots: Drag & drop or use ![[image.png]] to embed charts."
         ]
       },
@@ -1631,7 +1638,7 @@ class GuideModal extends Modal {
           "Click 'Trades' tab to see all trades in a table.",
           "Click column headers to sort.",
           "Click a cell to edit inline (dropdown for setup fields).",
-          "Right-click trade name to open the file.",
+          "Click trade name to open the file.",
           "Use 'Dashboard' tab for PnL analytics."
         ]
       },
@@ -1639,6 +1646,7 @@ class GuideModal extends Modal {
         title: "Settings",
         content: [
           "Click 'Settings' tab to manage Accounts, Models, Sessions, Symbols.",
+          "Configure your Checklist Templates for new trades.",
           "Create folders first before creating trades.",
           "Folder paths must contain 'Trading Settings'."
         ]
@@ -1734,31 +1742,63 @@ class SettingsModal extends Modal {
     // Checklist Templates section
     const ctSec = contentEl.createEl("div", { cls: "tj-setup-section" });
     ctSec.createEl("h3", { text: "Checklist Templates" });
-    ctSec.createEl("p", { text: "Configure your default checklists for new trades. Each new trade will use these templates.", cls: "setting-item-description" });
+    ctSec.createEl("p", { text: "Add checklist items for new trades. Each item becomes a checkbox.", cls: "setting-item-description" });
 
-    const ct = this.plugin.settings.templateChecklists || {};
-    const fields = [
+    const ct = this.plugin.settings.templateChecklists || { preTrade: [], preMarket: [], entryRules: [], exitRules: [] };
+    const checklistFields = [
       { key: "preTrade", label: "Pre-Trade Checklist" },
       { key: "preMarket", label: "Pre-Market Checklist" },
       { key: "entryRules", label: "Entry Rules" },
-      { key: "exitRules", label: "Exit Rules" },
-      { key: "whyTrade", label: "Why I Took This Trade" },
-      { key: "afterAction", label: "After-Action Report" },
-      { key: "lesson", label: "Lesson Learned" }
+      { key: "exitRules", label: "Exit Rules" }
     ];
 
-    for (const field of fields) {
-      const row = ctSec.createEl("div", { cls: "tj-ct-row" });
-      row.createEl("label", { text: field.label, cls: "tj-ct-label" });
-      const ta = row.createEl("textarea", {
-        cls: "tj-ct-textarea",
-        attr: { rows: "3" }
+    for (const field of checklistFields) {
+      const sec = ctSec.createEl("div", { cls: "tj-ct-field" });
+      sec.createEl("label", { text: field.label, cls: "tj-ct-label" });
+      
+      const list = sec.createEl("ul", { cls: "tj-ct-list" });
+      const items = ct[field.key] || [];
+      
+      items.forEach((item, idx) => {
+        const li = list.createEl("li", { cls: "tj-ct-item" });
+        li.createEl("span", { text: item, cls: "tj-ct-item-text" });
+        const delBtn = li.createEl("button", { text: "✕", cls: "tj-btn tj-btn-sm tj-btn-danger" });
+        delBtn.addEventListener("click", async () => {
+          items.splice(idx, 1);
+          this.plugin.settings.templateChecklists[field.key] = items;
+          await this.plugin.saveSettings();
+          this.onOpen();
+        });
       });
-      ta.value = ct[field.key] || "";
-      ta.addEventListener("change", async () => {
-        this.plugin.settings.templateChecklists[field.key] = ta.value;
+
+      const addRow = sec.createEl("div", { cls: "tj-ct-add-row" });
+      const input = addRow.createEl("input", {
+        cls: "tj-ct-input",
+        attr: { type: "text", placeholder: "Add item..." }
+      });
+      const addBtn = addRow.createEl("button", { text: "+", cls: "tj-btn tj-btn-sm tj-btn-primary" });
+      
+      const addItem = async () => {
+        const val = input.value.trim();
+        if (!val) return;
+        items.push(val);
+        this.plugin.settings.templateChecklists[field.key] = items;
         await this.plugin.saveSettings();
-      });
+        input.value = "";
+        // Add item to DOM without re-rendering
+        const li = list.createEl("li", { cls: "tj-ct-item" });
+        li.createEl("span", { text: val, cls: "tj-ct-item-text" });
+        const delBtn = li.createEl("button", { text: "✕", cls: "tj-btn tj-btn-sm tj-btn-danger" });
+        delBtn.addEventListener("click", async () => {
+          const idx = items.indexOf(val);
+          if (idx > -1) items.splice(idx, 1);
+          this.plugin.settings.templateChecklists[field.key] = items;
+          await this.plugin.saveSettings();
+          li.remove();
+        });
+      };
+      addBtn.addEventListener("click", addItem);
+      input.addEventListener("keydown", (e) => { if (e.key === "Enter") addItem(); });
     }
 
     const closeBtn = contentEl.createEl("div", { cls: "tj-modal-btns" });
