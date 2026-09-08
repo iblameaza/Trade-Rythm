@@ -46,8 +46,8 @@ const DEFAULT_SETTINGS = {
     "Max RR reached", "Actual RR achieved: W(+1), L(-1), BE(0)",
     "Outcome", "#Hour", "#Day", "#Month", "#Year", "#Duration in Minutes",
     "Backtest?", "Fees", "News Impact", "Mistakes", "Bias Review",
-    "Entry Performance", "Psychology Tracker", "LeaderBoard",
-    "Weekly Report", "Tradingview Chart",
+    "Entry Performance", "Psychology Tracker",
+    "Weekly Report",
     "Entry / Exit Date (end)", "No-Explanation?"
   ],
   templateYaml: [
@@ -57,34 +57,33 @@ const DEFAULT_SETTINGS = {
     '"Account": ""',
     '"Session": ""',
     '"Status": "Open / Closed"',
-    '"Gross PnL": 0',
-    '"Setup Grade": ""',
-    '"Order Type": ""',
     '"Type of Trade": ""',
     '"Entry TimeFrame": ""',
     '"Entry Signal": ""',
     '"Bias": ""',
-    '"Bias Review": ""',
-    '"Confluences": ""',
+    '"Order Type": ""',
+    '"Setup Grade": ""',
+    '"Market Conditions": ""',
     '"Key Levels": ""',
+    '"Confluences": ""',
     '"SL Management": ""',
     '"TP Management": ""',
-    '"Mistakes": ""',
-    '"Market Conditions": ""',
     '"News Impact": ""',
-    '"Entry Performance": ""',
-    '"LeaderBoard": ""',
-    '"Psychology Tracker": ""',
-    '"Weekly Report": ""',
+    '"Mistakes": ""',
     '"S/L Pips": 0',
-    '"Fees": 0',
     '"% Risk": 0',
+    '"Fees": 0',
+    '"Gross PnL": 0',
+    '"Net PnL": 0',
     '"Max RR reached": 0',
-    '"Actual RR achieved": "W(+1), L(-1), BE(0)"',
+    '"Actual RR achieved": ""',
     '"Entry / Exit Date": "{{date}}"',
     '"Entry / Exit Date (end)": null',
     '"No-Explanation?": false',
-    '"Tradingview Chart": ""',
+    '"Bias Review": ""',
+    '"Entry Performance": ""',
+    '"Psychology Tracker": ""',
+    '"Weekly Report": ""',
   ]
 };
 
@@ -215,69 +214,34 @@ class TradeRythmPlugin extends Plugin {
     );
 
     // Generic checklist template (user can customize via settings)
-    const preTradeChecklist = [
-      "News & Key events",
-      "Define Actual Price Action & Bias by marking Prominent Highs & Lows on HTF",
-      "Review all mistakes from the past",
-      "Check if price hit specific Confluences & if respected"
-    ];
-    const preMarketChecklist = [
-      "1h, 30m, 15m Confluence and Analysis move | TRACK THEM",
-      "Match with Previous Trend / Bias on LTF & HTF",
-      "Check today's market news & key events",
-      "Stay focused — no distractions, be completely in the chart",
-      "Review necessary reference material + past trades",
-      "Define High Timeframe (D, 4H) Bias as overview ONLY"
-    ];
-    const entryRules = [
-      "Massive LQ on HTF on opposite direction",
-      "Wait for LQ to end moves (usually on manipulation session)",
-      "Confluences (additional)",
-      "LTF LQ that ended with HTF LQ already",
-      "Bias & HTF Price action must be confirmed again",
-      "BOS",
-      "Respected OB",
-      "Liquidity Sweeps"
-    ];
-    const exitRules = [
-      "Confluences that match Bias",
-      "Forming AR LQ to opposite direction",
-      "Liquidity / OB / FVG"
-    ];
-
-    const buildChecklist = (items) => items.map((i) => `- [ ] ${i}`).join("\n");
-
     const body = [
       "---",
       ...yamlLines,
       "---",
       "",
       "> [!note] Before Trading",
-      ">",
-      "> ### Pre-Trade Checklist",
-      "> " + buildChecklist(preTradeChecklist).replace(/\n/g, "\n> "),
-      "> ### Pre-Market Checklist",
-      "> " + buildChecklist(preMarketChecklist).replace(/\n/g, "\n> "),
-      ">",
-      "> ### Entry Rules",
-      "> " + buildChecklist(entryRules).replace(/\n/g, "\n> "),
+      "> ",
+      "> *Add your own pre-trade checklist here. Example:*",
+      "> - [ ] News & Key events",
+      "> - [ ] Define Bias on HTF",
+      "> - [ ] Check Confluences",
       "",
       "> [!note] During Trading",
-      ">",
-      "> ### Exit Rules",
-      "> " + buildChecklist(exitRules).replace(/\n/g, "\n> "),
+      "> ",
       "> ### Why I Took This Trade",
       "> - ",
       "",
-      "### Trade Timeline",
-      "| Time | Action | Reason | Emotion | Stress | Confidence | Screenshot |",
-      "|------|--------|--------|---------|--------|------------|------------|",
-      "|      |        |        |         |        |            |            |",
-      "",
       "> [!note] After Trading",
-      ">",
+      "> ",
+      "> ### Exit Rules",
+      "> *Add your own exit rules here. Example:*",
+      "> - [ ] Confluences that match Bias",
+      "> - [ ] Forming AR LQ to opposite direction",
+      "> - [ ] Liquidity / OB / FVG",
+      "> ",
       "> ### After-Action Report",
       "> - ",
+      "> ",
       "> ### Lesson Learned",
       "> - ",
       "",
@@ -415,7 +379,8 @@ class TradeRythmPlugin extends Plugin {
       await this.ensureFolder(folderPath);
       const filePath = `${folderPath}/${name}.md`;
       if (await this.app.vault.adapter.exists(filePath)) return;
-      let body = `---\ntype: ${category}\n`;
+      let body = `---\n`;
+      body += `_category: ${category}\n`;
       if (extraData) {
         for (const [k, v] of Object.entries(extraData)) {
           body += `${k}: ${v}\n`;
@@ -930,7 +895,14 @@ class DatabaseView extends ItemView {
     this.filteredTrades.forEach((trade, i) => {
       const row = tbody.createEl("tr", { cls: "tj-row" });
       const name = trade.file.basename.replace(/#/g, "");
-      row.createEl("td", { text: name, cls: "tj-td tj-td-name" });
+      const nameTd = row.createEl("td", { text: name, cls: "tj-td tj-td-name" });
+      
+      // Click trade name to open file
+      nameTd.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.app.workspace.getLeaf(true).openFile(trade.file);
+      });
+      nameTd.style.cursor = "pointer";
 
       cols.forEach((col) => {
         const key = this.colKey(col);
@@ -956,11 +928,6 @@ class DatabaseView extends ItemView {
           if (editable.includes(col)) {
             this.openTradePanel(trade, col);
           }
-        });
-        td.addEventListener("contextmenu", (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          this.app.workspace.getLeaf(true).openFile(trade.file);
         });
       });
     });
