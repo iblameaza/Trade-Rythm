@@ -1757,6 +1757,14 @@ class SettingsModal extends Modal {
       const sec = ctSec.createEl("div", { cls: "tj-ct-field" });
       sec.createEl("label", { text: field.label, cls: "tj-ct-label" });
       
+      // Add input RIGHT BELOW title
+      const addRow = sec.createEl("div", { cls: "tj-ct-add-row" });
+      const input = addRow.createEl("input", {
+        cls: "tj-ct-input",
+        attr: { type: "text", placeholder: "Add item..." }
+      });
+      const addBtn = addRow.createEl("button", { text: "+", cls: "tj-btn tj-btn-sm tj-btn-primary" });
+      
       const list = sec.createEl("ul", { cls: "tj-ct-list" });
       const items = ct[field.key] || [];
       
@@ -1813,13 +1821,6 @@ class SettingsModal extends Modal {
       };
       
       items.forEach((item, idx) => createDraggableItem(item, idx));
-
-      const addRow = sec.createEl("div", { cls: "tj-ct-add-row" });
-      const input = addRow.createEl("input", {
-        cls: "tj-ct-input",
-        attr: { type: "text", placeholder: "Add item..." }
-      });
-      const addBtn = addRow.createEl("button", { text: "+", cls: "tj-btn tj-btn-sm tj-btn-primary" });
       
       const addItem = async () => {
         const val = input.value.trim();
@@ -1859,20 +1860,59 @@ class SettingsModal extends Modal {
 
     const tbl = sec.createEl("table", { cls: "tj-table tj-setup-table" });
     const hdr = tbl.createEl("thead").createEl("tr");
-    ["Name", "Balance", "Currency", "Type", ""].forEach((t) => hdr.createEl("th", { text: t }));
+    ["⠿", "Name", "Balance", "Currency", "Type", ""].forEach((t) => hdr.createEl("th", { text: t }));
     const bdy = tbl.createEl("tbody");
+    
     for (const item of items) {
       const fm = await this.plugin.readSetupFileYaml("accounts", item.name);
       const bal = fm?.initialBalance || "0";
       const cur = fm?.currency || "USD";
       const typ = fm?.type || "live";
-      const pnl = 0; // computed from trades
-      const row = bdy.createEl("tr");
+      const row = bdy.createEl("tr", { attr: { draggable: "true" } });
+      row.createEl("td", { text: "⠿", cls: "tj-ct-drag-handle" });
       row.createEl("td", { text: item.name });
       row.createEl("td", { text: SettingsModal.formatCurrency(parseFloat(bal), cur) });
       row.createEl("td", { text: cur });
       row.createEl("td", { text: typ });
       const del = row.createEl("td").createEl("button", { text: "✕", cls: "tj-btn tj-btn-sm tj-btn-danger" });
+      
+      row.addEventListener("dragstart", (e) => {
+        row.addClass("dragging");
+        e.dataTransfer.setData("text/plain", item.name);
+        e.dataTransfer.effectAllowed = "move";
+      });
+      
+      row.addEventListener("dragend", () => {
+        row.removeClass("dragging");
+        bdy.querySelectorAll("tr").forEach((el) => el.removeClass("drag-over"));
+      });
+      
+      row.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        row.addClass("drag-over");
+      });
+      
+      row.addEventListener("dragleave", () => {
+        row.removeClass("drag-over");
+      });
+      
+      row.addEventListener("drop", async (e) => {
+        e.preventDefault();
+        row.removeClass("drag-over");
+        const fromName = e.dataTransfer.getData("text/plain");
+        const toName = item.name;
+        if (fromName === toName) return;
+        
+        const fromIdx = items.findIndex((i) => i.name === fromName);
+        const toIdx = items.findIndex((i) => i.name === toName);
+        if (fromIdx === -1 || toIdx === -1) return;
+        
+        const movedItem = items.splice(fromIdx, 1)[0];
+        items.splice(toIdx, 0, movedItem);
+        this.onOpen();
+      });
+      
       del.addEventListener("click", async () => {
         await this.plugin.deleteSetupItem("accounts", item.name);
         this.onOpen();
@@ -1884,6 +1924,63 @@ class SettingsModal extends Modal {
     const addRow = sec.createEl("div", { cls: "tj-setup-add-row" });
     const input = addRow.createEl("input", { cls: "tj-sm-input", attr: { type: "text", placeholder: `Add ${SETUP_CATEGORIES[key].label.slice(0, -1)}...` } });
     const addBtn = addRow.createEl("button", { text: "Add", cls: "tj-btn tj-btn-sm tj-btn-primary" });
+    
+    const list = sec.createEl("ul", { cls: "tj-setup-list" });
+    
+    const createDraggableItem = (item) => {
+      const li = list.createEl("li", { attr: { draggable: "true" } });
+      li.createEl("span", { text: "⠿", cls: "tj-ct-drag-handle" });
+      li.createEl("span", { text: item.name, cls: "tj-ct-item-text" });
+      const del = li.createEl("button", { text: "✕", cls: "tj-btn tj-btn-sm tj-btn-danger" });
+      
+      li.addEventListener("dragstart", (e) => {
+        li.addClass("dragging");
+        e.dataTransfer.setData("text/plain", item.name);
+        e.dataTransfer.effectAllowed = "move";
+      });
+      
+      li.addEventListener("dragend", () => {
+        li.removeClass("dragging");
+        list.querySelectorAll("li").forEach((el) => el.removeClass("drag-over"));
+      });
+      
+      li.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        li.addClass("drag-over");
+      });
+      
+      li.addEventListener("dragleave", () => {
+        li.removeClass("drag-over");
+      });
+      
+      li.addEventListener("drop", async (e) => {
+        e.preventDefault();
+        li.removeClass("drag-over");
+        const fromName = e.dataTransfer.getData("text/plain");
+        const toName = item.name;
+        if (fromName === toName) return;
+        
+        const fromIdx = items.findIndex((i) => i.name === fromName);
+        const toIdx = items.findIndex((i) => i.name === toName);
+        if (fromIdx === -1 || toIdx === -1) return;
+        
+        const movedItem = items.splice(fromIdx, 1)[0];
+        items.splice(toIdx, 0, movedItem);
+        
+        // Re-render list
+        list.empty();
+        items.forEach((i) => createDraggableItem(i));
+      });
+      
+      del.addEventListener("click", async () => {
+        await this.plugin.deleteSetupItem(key, item.name);
+        this.onOpen();
+      });
+    };
+    
+    items.forEach((item) => createDraggableItem(item));
+    
     addBtn.addEventListener("click", async () => {
       const name = input.value.trim();
       if (!name) return;
@@ -1892,18 +1989,6 @@ class SettingsModal extends Modal {
       this.onOpen();
     });
     input.addEventListener("keydown", (e) => { if (e.key === "Enter") addBtn.click(); });
-
-    if (items.length === 0) return;
-    const list = sec.createEl("ul", { cls: "tj-setup-list" });
-    items.forEach((item) => {
-      const li = list.createEl("li");
-      li.createEl("span", { text: item.name });
-      const del = li.createEl("button", { text: "✕", cls: "tj-btn tj-btn-sm tj-btn-danger" });
-      del.addEventListener("click", async () => {
-        await this.plugin.deleteSetupItem(key, item.name);
-        this.onOpen();
-      });
-    });
   }
 
   onClose() {

@@ -881,3 +881,44 @@
   border-color: var(--tj-accent);
   outline: none;
 }
+
+/* ── Draggable Settings Lists ─────────────────────── */
+.tj-setup-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.tj-setup-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  margin-bottom: 2px;
+  background: var(--tj-bg-alt);
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: grab;
+  transition: opacity 0.15s, transform 0.15s;
+}
+.tj-setup-list li:active {
+  cursor: grabbing;
+}
+.tj-setup-list li.dragging {
+  opacity: 0.5;
+  transform: scale(0.98);
+}
+.tj-setup-list li.drag-over {
+  border-top: 2px solid var(--tj-accent);
+}
+.tj-setup-table tr {
+  cursor: grab;
+}
+.tj-setup-table tr:active {
+  cursor: grabbing;
+}
+.tj-setup-table tr.dragging {
+  opacity: 0.5;
+}
+.tj-setup-table tr.drag-over {
+  border-top: 2px solid var(--tj-accent);
+}
