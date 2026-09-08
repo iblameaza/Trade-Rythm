@@ -221,29 +221,26 @@ class TradeRythmPlugin extends Plugin {
       "",
       "> [!note] Before Trading",
       "> ",
-      "> *Add your own pre-trade checklist here. Example:*",
-      "> - [ ] News & Key events",
-      "> - [ ] Define Bias on HTF",
-      "> - [ ] Check Confluences",
+      "### Pre-Trade Checklist",
+      "- [ ] ",
+      "### Pre-Market Checklist",
+      "- [ ] ",
+      "### Entry Rules",
+      "- [ ] ",
       "",
       "> [!note] During Trading",
       "> ",
-      "> ### Why I Took This Trade",
-      "> - ",
+      "### Why I Took This Trade",
+      "- ",
       "",
       "> [!note] After Trading",
       "> ",
-      "> ### Exit Rules",
-      "> *Add your own exit rules here. Example:*",
-      "> - [ ] Confluences that match Bias",
-      "> - [ ] Forming AR LQ to opposite direction",
-      "> - [ ] Liquidity / OB / FVG",
-      "> ",
-      "> ### After-Action Report",
-      "> - ",
-      "> ",
-      "> ### Lesson Learned",
-      "> - ",
+      "### Exit Rules",
+      "- [ ] ",
+      "### After-Action Report",
+      "- ",
+      "### Lesson Learned",
+      "- ",
       "",
       "---",
       "",
@@ -522,6 +519,15 @@ class DatabaseView extends ItemView {
     this.accountBtn = btnBar.createEl("button", {
       text: "All Accounts ▼",
       cls: "tj-btn",
+    });
+    
+    const btnGuide = btnBar.createEl("button", {
+      text: "?",
+      cls: "tj-btn tj-btn-guide",
+      attr: { "aria-label": "Plugin Guide" },
+    });
+    btnGuide.addEventListener("click", () => {
+      new GuideModal(this.app, this.plugin).open();
     });
     this.accountBtn.addEventListener("click", async (e) => {
       if (this.activeTab !== "dashboard") return;
@@ -1540,6 +1546,101 @@ class DatabaseView extends ItemView {
       r.createEl("td", { text: `$${e.avg.toFixed(2)}` });
       r.createEl("td", { text: String(e.wins) });
     });
+  }
+}
+
+// ─── Guide Modal ──────────────────────────────────────
+class GuideModal extends Modal {
+  constructor(app, plugin) {
+    super(app);
+    this.plugin = plugin;
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.addClass("tj-guide-modal");
+    contentEl.createEl("h2", { text: "Trade Rythm Guide" });
+
+    const sections = [
+      {
+        title: "Creating Trades",
+        content: [
+          "Click '+ New Trade' to create a live trade, or '+ New Backtest' for backtesting.",
+          "Fill in the YAML properties at the top of the file (Position, Symbol, Model, etc.).",
+          "The trade is auto-linked to your Trading Settings folders."
+        ]
+      },
+      {
+        title: "Trade Properties",
+        content: [
+          "Status: Open (in progress) or Closed (finished).",
+          "Gross PnL / Net PnL: Fill after closing the trade.",
+          "Model, Account, Session: Must match names in Trading Settings folders.",
+          "Setup Grade: A/B/C/D rating for the trade quality."
+        ]
+      },
+      {
+        title: "Checklists",
+        content: [
+          "Pre-Trade Checklist: Run before entering any trade.",
+          "Pre-Market Checklist: Run at market open.",
+          "Entry Rules: Your criteria for entering a position.",
+          "Exit Rules: Your criteria for taking profit or cutting losses.",
+          "Edit these in each trade file to match your trading plan."
+        ]
+      },
+      {
+        title: "During Trading",
+        content: [
+          "Why I Took This Trade: Document your reasoning.",
+          "Trade Timeline: Log actions as you manage the trade.",
+          "Screenshots: Drag & drop or use ![[image.png]] to embed charts."
+        ]
+      },
+      {
+        title: "After Trading",
+        content: [
+          "After-Action Report: Review what went right/wrong.",
+          "Lesson Learned: What will you do differently next time?",
+          "Fill Gross PnL, Net PnL, and Actual RR achieved."
+        ]
+      },
+      {
+        title: "Database View",
+        content: [
+          "Click 'Trades' tab to see all trades in a table.",
+          "Click column headers to sort.",
+          "Click a cell to edit inline (dropdown for setup fields).",
+          "Right-click trade name to open the file.",
+          "Use 'Dashboard' tab for PnL analytics."
+        ]
+      },
+      {
+        title: "Settings",
+        content: [
+          "Click 'Settings' tab to manage Accounts, Models, Sessions, Symbols.",
+          "Create folders first before creating trades.",
+          "Folder paths must contain 'Trading Settings'."
+        ]
+      }
+    ];
+
+    sections.forEach((section) => {
+      const h3 = contentEl.createEl("h3", { text: section.title });
+      h3.style.marginTop = "16px";
+      const ul = contentEl.createEl("ul");
+      section.content.forEach((item) => {
+        ul.createEl("li", { text: item });
+      });
+    });
+
+    const closeBtn = contentEl.createEl("div", { cls: "tj-modal-btns" });
+    closeBtn.createEl("button", { text: "Close", cls: "tj-btn tj-btn-primary" })
+      .addEventListener("click", () => this.close());
+  }
+
+  onClose() {
+    this.contentEl.empty();
   }
 }
 

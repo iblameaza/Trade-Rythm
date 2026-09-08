@@ -82,6 +82,40 @@
   background: var(--tj-accent-hover);
 }
 
+.tj-btn-guide {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-weight: bold;
+  font-size: 14px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--background-modifier-border);
+  color: var(--text-muted);
+  border: 1px solid var(--background-modifier-border);
+  margin-left: auto;
+}
+.tj-btn-guide:hover {
+  background: var(--tj-accent);
+  color: var(--text-on-accent);
+  border-color: var(--tj-accent);
+}
+
+.tj-guide-modal h2 {
+  margin-bottom: 8px;
+}
+.tj-guide-modal h3 {
+  color: var(--text-accent);
+}
+.tj-guide-modal ul {
+  padding-left: 20px;
+}
+.tj-guide-modal li {
+  margin-bottom: 4px;
+}
+
 /* ── Content ──────────────────────────────────── */
 .tj-content {
   flex: 1;
