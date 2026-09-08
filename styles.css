@@ -793,3 +793,31 @@
   font-size: 13px;
   color: var(--tj-text-muted);
 }
+
+/* ── Checklist Templates ─────────────────────────── */
+.tj-ct-row {
+  margin-bottom: 12px;
+}
+.tj-ct-label {
+  display: block;
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 4px;
+  color: var(--tj-text);
+}
+.tj-ct-textarea {
+  width: 100%;
+  min-height: 60px;
+  padding: 8px;
+  font-family: monospace;
+  font-size: 12px;
+  background: var(--tj-bg-alt);
+  border: 1px solid var(--tj-border);
+  border-radius: 4px;
+  color: var(--tj-text);
+  resize: vertical;
+}
+.tj-ct-textarea:focus {
+  border-color: var(--tj-accent);
+  outline: none;
+}

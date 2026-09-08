@@ -84,7 +84,16 @@ const DEFAULT_SETTINGS = {
     '"Entry Performance": ""',
     '"Psychology Tracker": ""',
     '"Weekly Report": ""',
-  ]
+  ],
+  templateChecklists: {
+    preTrade: "",
+    preMarket: "",
+    entryRules: "",
+    exitRules: "",
+    whyTrade: "",
+    afterAction: "",
+    lesson: ""
+  }
 };
 
 // ─── Plugin ─────────────────────────────────────────────
@@ -213,34 +222,17 @@ class TradeRythmPlugin extends Plugin {
       l.replace("{{date}}", today)
     );
 
-    // Try to copy checklists from last trade
-    let checklists = null;
-    const lastTrade = tradeFiles
-      .filter((f) => f.name.match(/^(?:Trade|Backtest) \d+\.md$/))
-      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
-      .pop();
-    
-    if (lastTrade) {
-      try {
-        const content = await this.app.vault.read(lastTrade);
-        checklists = this.extractChecklists(content);
-      } catch (e) {
-        console.error("Failed to read last trade for checklists:", e);
-      }
-    }
-
-    // Default empty checklists
-    const defaultChecklists = {
-      preTrade: "- [ ] ",
-      preMarket: "- [ ] ",
-      entryRules: "- [ ] ",
-      exitRules: "- [ ] ",
-      whyTrade: "- ",
-      afterAction: "- ",
-      lesson: "- "
+    // Use checklist templates from settings
+    const ct = this.settings.templateChecklists || {};
+    const c = {
+      preTrade: ct.preTrade || "- [ ] ",
+      preMarket: ct.preMarket || "- [ ] ",
+      entryRules: ct.entryRules || "- [ ] ",
+      exitRules: ct.exitRules || "- [ ] ",
+      whyTrade: ct.whyTrade || "- ",
+      afterAction: ct.afterAction || "- ",
+      lesson: ct.lesson || "- "
     };
-
-    const c = checklists || defaultChecklists;
 
     const body = [
       "---",
@@ -416,49 +408,6 @@ class TradeRythmPlugin extends Plugin {
     } catch (e) {
       console.error(`Trade Rythm addSetupItem error (${category}/${name}):`, e);
     }
-  }
-
-  extractChecklists(content) {
-    const result = {
-      preTrade: "- [ ] ",
-      preMarket: "- [ ] ",
-      entryRules: "- [ ] ",
-      exitRules: "- [ ] ",
-      whyTrade: "- ",
-      afterAction: "- ",
-      lesson: "- "
-    };
-
-    const lines = content.split("\n");
-    let currentSection = null;
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      
-      // Detect sections
-      if (line === "### Pre-Trade Checklist") currentSection = "preTrade";
-      else if (line === "### Pre-Market Checklist") currentSection = "preMarket";
-      else if (line === "### Entry Rules") currentSection = "entryRules";
-      else if (line === "### Exit Rules") currentSection = "exitRules";
-      else if (line === "### Why I Took This Trade") currentSection = "whyTrade";
-      else if (line === "### After-Action Report") currentSection = "afterAction";
-      else if (line === "### Lesson Learned") currentSection = "lesson";
-      else if (line.startsWith("### ") && currentSection) {
-        // Hit a new section, stop collecting for current
-        currentSection = null;
-      }
-      
-      // Collect checklist items
-      if (currentSection && (line.startsWith("- [ ]") || line.startsWith("- "))) {
-        if (result[currentSection] === "- [ ] " || result[currentSection] === "- ") {
-          result[currentSection] = line;
-        } else {
-          result[currentSection] += "\n" + line;
-        }
-      }
-    }
-
-    return result;
   }
 
   async deleteSetupItem(category, name) {
@@ -1780,6 +1729,36 @@ class SettingsModal extends Modal {
       } else {
         this.renderSimpleList(sec, key, items);
       }
+    }
+
+    // Checklist Templates section
+    const ctSec = contentEl.createEl("div", { cls: "tj-setup-section" });
+    ctSec.createEl("h3", { text: "Checklist Templates" });
+    ctSec.createEl("p", { text: "Configure your default checklists for new trades. Each new trade will use these templates.", cls: "setting-item-description" });
+
+    const ct = this.plugin.settings.templateChecklists || {};
+    const fields = [
+      { key: "preTrade", label: "Pre-Trade Checklist" },
+      { key: "preMarket", label: "Pre-Market Checklist" },
+      { key: "entryRules", label: "Entry Rules" },
+      { key: "exitRules", label: "Exit Rules" },
+      { key: "whyTrade", label: "Why I Took This Trade" },
+      { key: "afterAction", label: "After-Action Report" },
+      { key: "lesson", label: "Lesson Learned" }
+    ];
+
+    for (const field of fields) {
+      const row = ctSec.createEl("div", { cls: "tj-ct-row" });
+      row.createEl("label", { text: field.label, cls: "tj-ct-label" });
+      const ta = row.createEl("textarea", {
+        cls: "tj-ct-textarea",
+        attr: { rows: "3" }
+      });
+      ta.value = ct[field.key] || "";
+      ta.addEventListener("change", async () => {
+        this.plugin.settings.templateChecklists[field.key] = ta.value;
+        await this.plugin.saveSettings();
+      });
     }
 
     const closeBtn = contentEl.createEl("div", { cls: "tj-modal-btns" });
