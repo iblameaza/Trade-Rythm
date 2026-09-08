@@ -197,15 +197,15 @@ class TradeRythmPlugin extends Plugin {
     const label = isBacktest ? "Backtest" : "Trade";
 
     const files = this.app.vault.getMarkdownFiles();
-    const maxNum = files
-      .filter((f) => f.path.startsWith(folder))
+    const tradeFiles = files.filter((f) => f.path.startsWith(folder));
+    const maxNum = tradeFiles
       .reduce((max, f) => {
-        const m = f.name.match(new RegExp(`^Trade (\\d+)`));
+        const m = f.name.match(new RegExp(`^(?:Trade|Backtest) (\\d+)`));
         return m ? Math.max(max, parseInt(m[1])) : max;
       }, 0);
     const nextNum = maxNum + 1;
 
-    const fileName = `Trade ${nextNum}.md`;
+    const fileName = `${label} ${nextNum}.md`;
     const filePath = `${folder}/${fileName}`;
 
     const today = new Date().toISOString().split("T")[0];
@@ -213,7 +213,35 @@ class TradeRythmPlugin extends Plugin {
       l.replace("{{date}}", today)
     );
 
-    // Generic checklist template (user can customize via settings)
+    // Try to copy checklists from last trade
+    let checklists = null;
+    const lastTrade = tradeFiles
+      .filter((f) => f.name.match(/^(?:Trade|Backtest) \d+\.md$/))
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+      .pop();
+    
+    if (lastTrade) {
+      try {
+        const content = await this.app.vault.read(lastTrade);
+        checklists = this.extractChecklists(content);
+      } catch (e) {
+        console.error("Failed to read last trade for checklists:", e);
+      }
+    }
+
+    // Default empty checklists
+    const defaultChecklists = {
+      preTrade: "- [ ] ",
+      preMarket: "- [ ] ",
+      entryRules: "- [ ] ",
+      exitRules: "- [ ] ",
+      whyTrade: "- ",
+      afterAction: "- ",
+      lesson: "- "
+    };
+
+    const c = checklists || defaultChecklists;
+
     const body = [
       "---",
       ...yamlLines,
@@ -222,25 +250,25 @@ class TradeRythmPlugin extends Plugin {
       "> [!note] Before Trading",
       "> ",
       "### Pre-Trade Checklist",
-      "- [ ] ",
+      c.preTrade,
       "### Pre-Market Checklist",
-      "- [ ] ",
+      c.preMarket,
       "### Entry Rules",
-      "- [ ] ",
+      c.entryRules,
       "",
       "> [!note] During Trading",
       "> ",
       "### Why I Took This Trade",
-      "- ",
+      c.whyTrade,
       "",
       "> [!note] After Trading",
       "> ",
       "### Exit Rules",
-      "- [ ] ",
+      c.exitRules,
       "### After-Action Report",
-      "- ",
+      c.afterAction,
       "### Lesson Learned",
-      "- ",
+      c.lesson,
       "",
       "---",
       "",
@@ -388,6 +416,49 @@ class TradeRythmPlugin extends Plugin {
     } catch (e) {
       console.error(`Trade Rythm addSetupItem error (${category}/${name}):`, e);
     }
+  }
+
+  extractChecklists(content) {
+    const result = {
+      preTrade: "- [ ] ",
+      preMarket: "- [ ] ",
+      entryRules: "- [ ] ",
+      exitRules: "- [ ] ",
+      whyTrade: "- ",
+      afterAction: "- ",
+      lesson: "- "
+    };
+
+    const lines = content.split("\n");
+    let currentSection = null;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      
+      // Detect sections
+      if (line === "### Pre-Trade Checklist") currentSection = "preTrade";
+      else if (line === "### Pre-Market Checklist") currentSection = "preMarket";
+      else if (line === "### Entry Rules") currentSection = "entryRules";
+      else if (line === "### Exit Rules") currentSection = "exitRules";
+      else if (line === "### Why I Took This Trade") currentSection = "whyTrade";
+      else if (line === "### After-Action Report") currentSection = "afterAction";
+      else if (line === "### Lesson Learned") currentSection = "lesson";
+      else if (line.startsWith("### ") && currentSection) {
+        // Hit a new section, stop collecting for current
+        currentSection = null;
+      }
+      
+      // Collect checklist items
+      if (currentSection && (line.startsWith("- [ ]") || line.startsWith("- "))) {
+        if (result[currentSection] === "- [ ] " || result[currentSection] === "- ") {
+          result[currentSection] = line;
+        } else {
+          result[currentSection] += "\n" + line;
+        }
+      }
+    }
+
+    return result;
   }
 
   async deleteSetupItem(category, name) {
