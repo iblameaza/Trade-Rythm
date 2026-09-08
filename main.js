@@ -1760,17 +1760,59 @@ class SettingsModal extends Modal {
       const list = sec.createEl("ul", { cls: "tj-ct-list" });
       const items = ct[field.key] || [];
       
-      items.forEach((item, idx) => {
-        const li = list.createEl("li", { cls: "tj-ct-item" });
+      const createDraggableItem = (item, idx) => {
+        const li = list.createEl("li", { cls: "tj-ct-item", attr: { draggable: "true" } });
+        li.createEl("span", { text: "⠿", cls: "tj-ct-drag-handle" });
         li.createEl("span", { text: item, cls: "tj-ct-item-text" });
         const delBtn = li.createEl("button", { text: "✕", cls: "tj-btn tj-btn-sm tj-btn-danger" });
+        
+        li.addEventListener("dragstart", (e) => {
+          li.addClass("dragging");
+          e.dataTransfer.setData("text/plain", idx);
+          e.dataTransfer.effectAllowed = "move";
+        });
+        
+        li.addEventListener("dragend", () => {
+          li.removeClass("dragging");
+          list.querySelectorAll(".tj-ct-item").forEach((el) => el.removeClass("drag-over"));
+        });
+        
+        li.addEventListener("dragover", (e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          li.addClass("drag-over");
+        });
+        
+        li.addEventListener("dragleave", () => {
+          li.removeClass("drag-over");
+        });
+        
+        li.addEventListener("drop", async (e) => {
+          e.preventDefault();
+          li.removeClass("drag-over");
+          const fromIdx = parseInt(e.dataTransfer.getData("text/plain"));
+          const toIdx = idx;
+          if (fromIdx === toIdx) return;
+          
+          const movedItem = items.splice(fromIdx, 1)[0];
+          items.splice(toIdx, 0, movedItem);
+          this.plugin.settings.templateChecklists[field.key] = items;
+          await this.plugin.saveSettings();
+          
+          // Re-render list
+          list.empty();
+          items.forEach((item, i) => createDraggableItem(item, i));
+        });
+        
         delBtn.addEventListener("click", async () => {
           items.splice(idx, 1);
           this.plugin.settings.templateChecklists[field.key] = items;
           await this.plugin.saveSettings();
           li.remove();
         });
-      });
+      };
+      
+      items.forEach((item, idx) => createDraggableItem(item, idx));
 
       const addRow = sec.createEl("div", { cls: "tj-ct-add-row" });
       const input = addRow.createEl("input", {
@@ -1786,17 +1828,7 @@ class SettingsModal extends Modal {
         this.plugin.settings.templateChecklists[field.key] = items;
         await this.plugin.saveSettings();
         input.value = "";
-        // Add item to DOM without re-rendering
-        const li = list.createEl("li", { cls: "tj-ct-item" });
-        li.createEl("span", { text: val, cls: "tj-ct-item-text" });
-        const delBtn = li.createEl("button", { text: "✕", cls: "tj-btn tj-btn-sm tj-btn-danger" });
-        delBtn.addEventListener("click", async () => {
-          const idx = items.indexOf(val);
-          if (idx > -1) items.splice(idx, 1);
-          this.plugin.settings.templateChecklists[field.key] = items;
-          await this.plugin.saveSettings();
-          li.remove();
-        });
+        createDraggableItem(val, items.length - 1);
       };
       addBtn.addEventListener("click", addItem);
       input.addEventListener("keydown", (e) => { if (e.key === "Enter") addItem(); });

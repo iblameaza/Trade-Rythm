@@ -799,6 +799,7 @@
   margin-bottom: 16px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--tj-border);
+  position: relative;
 }
 .tj-ct-field:last-of-type {
   border-bottom: none;
@@ -809,11 +810,18 @@
   font-size: 13px;
   margin-bottom: 8px;
   color: var(--tj-text);
+  position: sticky;
+  top: 0;
+  background: var(--background-primary);
+  z-index: 1;
+  padding: 4px 0;
 }
 .tj-ct-list {
   list-style: none;
   padding: 0;
   margin: 0 0 8px 0;
+  max-height: 200px;
+  overflow-y: auto;
 }
 .tj-ct-item {
   display: flex;
@@ -824,16 +832,41 @@
   background: var(--tj-bg-alt);
   border-radius: 4px;
   font-size: 12px;
+  cursor: grab;
+  transition: opacity 0.15s, transform 0.15s;
+}
+.tj-ct-item:active {
+  cursor: grabbing;
+}
+.tj-ct-item.dragging {
+  opacity: 0.5;
+  transform: scale(0.98);
+}
+.tj-ct-item.drag-over {
+  border-top: 2px solid var(--tj-accent);
 }
 .tj-ct-item-text {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  pointer-events: none;
+}
+.tj-ct-drag-handle {
+  color: var(--text-muted);
+  margin-right: 6px;
+  cursor: grab;
+  font-size: 10px;
+  pointer-events: none;
 }
 .tj-ct-add-row {
   display: flex;
   gap: 4px;
+  position: sticky;
+  bottom: 0;
+  background: var(--background-primary);
+  padding: 4px 0;
+  z-index: 1;
 }
 .tj-ct-input {
   flex: 1;
