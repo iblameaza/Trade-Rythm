@@ -121,4 +121,4 @@ If you found this plugin helpful for your journey, you can give me any amount of
 
 ## License
 
-GPL v3. Copyright (c) 2026 iblameaza. See [LICENSE](LICENSE) for details.
+MIT License. Copyright (c) 2026 iblameaza. See [LICENSE](LICENSE) for details.
