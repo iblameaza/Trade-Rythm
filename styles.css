@@ -554,24 +554,30 @@
 }
 
 /* ── Liquid Glass Modals (Plugin Only) ──────────── */
-.tj-glass {
-  background: transparent;
+.tj-glass,
+.tj-glass .modal-container {
+  background: transparent !important;
 }
 .tj-glass .modal-bg {
   background: rgba(0, 0, 0, 0.15) !important;
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(3px) !important;
+  -webkit-backdrop-filter: blur(3px) !important;
 }
 .tj-glass .modal-content {
-  background: rgba(128, 128, 128, 0.12) !important;
-  backdrop-filter: blur(24px) saturate(150%);
-  -webkit-backdrop-filter: blur(24px) saturate(150%);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 16px;
-  box-shadow: 
-    0 8px 32px rgba(0, 0, 0, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.25),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.08);
+  position: relative !important;
+  background: rgba(30, 30, 40, 0.4) !important;
+  backdrop-filter: blur(24px) saturate(120%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(120%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 16px !important;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.05) !important;
+  overflow: visible !important;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
 }
 .tj-glass .modal-content::before {
   content: '';
@@ -582,8 +588,8 @@
   height: 40%;
   background: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.12) 0%,
-    rgba(255, 255, 255, 0.03) 100%
+    rgba(255, 255, 255, 0.08) 0%,
+    transparent 100%
   );
   border-radius: 16px 16px 0 0;
   pointer-events: none;
@@ -596,16 +602,16 @@
 
 /* Settings Modal */
 .tj-glass.tj-settings-glass .modal-content {
-  background: rgba(128, 128, 128, 0.08) !important;
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  background: rgba(30, 30, 40, 0.38) !important;
+  backdrop-filter: blur(22px) saturate(115%) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(115%) !important;
 }
 
 /* Guide Modal */
 .tj-glass.tj-guide-glass .modal-content {
-  background: rgba(128, 128, 128, 0.1) !important;
-  backdrop-filter: blur(22px) saturate(155%);
-  -webkit-backdrop-filter: blur(22px) saturate(155%);
+  background: rgba(30, 30, 40, 0.4) !important;
+  backdrop-filter: blur(22px) saturate(115%) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(115%) !important;
 }
 
 /* ── Setup Modal ──────────────────────────────── */
@@ -883,15 +889,15 @@
   transform: translate(-50%, -50%);
   width: 360px;
   max-height: 80vh;
-  background: rgba(128, 128, 128, 0.12) !important;
-  backdrop-filter: blur(24px) saturate(150%);
-  -webkit-backdrop-filter: blur(24px) saturate(150%);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 16px;
-  box-shadow: 
-    0 8px 32px rgba(0, 0, 0, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.05);
+  background: rgba(30, 30, 40, 0.45) !important;
+  backdrop-filter: blur(28px) saturate(130%) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(130%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 16px !important;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.05) !important;
   display: flex;
   flex-direction: column;
   z-index: 100000;
