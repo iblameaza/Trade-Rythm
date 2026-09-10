@@ -1584,6 +1584,8 @@ class GuideModal extends Modal {
 
   onOpen() {
     const { contentEl } = this;
+    this.containerEl.addClass("tj-glass");
+    this.containerEl.addClass("tj-guide-glass");
     contentEl.addClass("tj-guide-modal");
     contentEl.createEl("h2", { text: "Trade Rythm Guide" });
 
@@ -1692,6 +1694,7 @@ class ConfirmModal extends Modal {
 
   onOpen() {
     const { contentEl } = this;
+    this.containerEl.addClass("tj-glass");
     contentEl.empty();
     contentEl.addClass("tj-modal");
 
@@ -1731,6 +1734,8 @@ class SettingsModal extends Modal {
 
   async onOpen() {
     const { contentEl } = this;
+    this.containerEl.addClass("tj-glass");
+    this.containerEl.addClass("tj-settings-glass");
     contentEl.empty();
     contentEl.addClass("tj-modal");
     contentEl.createEl("h2", { text: "Trading Settings" });
