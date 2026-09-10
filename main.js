@@ -38,7 +38,7 @@ const DEFAULT_SETTINGS = {
   dashboardAccount: "",
   tableFontSize: "12",
   columns: [
-    "Status", "Account", "Model", "Symbol", "Position",
+    "Status", "Account", "Model", "Symbol", "Position", "Direction",
     "Entry / Exit Date", "News Impact", "Bias", "Market Conditions",
     "Type of Trade", "Entry TimeFrame", "Confluences", "Key Levels",
     "Entry Signal", "Order Type", "S/L Pips", "% Risk",
@@ -54,6 +54,7 @@ const DEFAULT_SETTINGS = {
     '"Model": ""',
     '"Symbol": ""',
     '"Position": "Long / Short"',
+    '"Direction": ""',
     '"Entry / Exit Date": "{{date}}"',
     '"Entry / Exit Date (end)": null',
     '"News Impact": ""',
@@ -76,7 +77,7 @@ const DEFAULT_SETTINGS = {
     '"Net PnL": 0',
     '"Setup Grade": ""',
     '"Mistakes": []',
-    '"No Explanation?": false,
+    '"No Explanation?": false',
     '"Bias Review": ""',
     '"Entry Performance": ""',
     '"Psychology Tracker": ""',
@@ -945,7 +946,7 @@ class DatabaseView extends ItemView {
 
         td.addEventListener("click", (e) => {
           e.stopPropagation();
-          const editable = ["Status", "Account", "Model", "Symbol", "Position",
+          const editable = ["Status", "Account", "Model", "Symbol", "Position", "Direction",
             "News Impact", "Bias", "Market Conditions", "Type of Trade",
             "Entry TimeFrame", "Confluences", "Key Levels", "Entry Signal",
             "Order Type", "SL Management", "TP Management", "Setup Grade",
@@ -1045,6 +1046,7 @@ class DatabaseView extends ItemView {
       case "Model": return trade.model;
       case "Symbol": return trade.symbol;
       case "Position": return trade.direction;
+      case "Direction": return trade.direction;
       case "Entry / Exit Date": return trade.date;
       case "News Impact": return trade.newsImpact || "";
       case "Bias": return trade.bias || "";
@@ -1085,7 +1087,8 @@ class DatabaseView extends ItemView {
   async getSetupOptions(col) {
     const map = {
       Account: "accounts", Model: "models", Symbol: "symbols",
-      Position: "positions", "Entry TimeFrame": "entryTimeframes",
+      Position: "positions", Direction: "positions",
+      "Entry TimeFrame": "entryTimeframes",
       "Entry Signal": "entrySignals", "Market Conditions": "marketConditions",
       "SL Management": "slManagement", "TP Management": "tpManagement",
       "News Impact": "newsImpact", "Type of Trade": "typesOfTrade",
@@ -1136,7 +1139,7 @@ class DatabaseView extends ItemView {
   async openTradePanel(trade, focusCol) {
     this.cleanupEditor();
 
-    const editableCols = ["Status", "Account", "Model", "Symbol", "Position",
+    const editableCols = ["Status", "Account", "Model", "Symbol", "Position", "Direction",
       "News Impact", "Bias", "Market Conditions", "Type of Trade",
       "Entry TimeFrame", "Confluences", "Key Levels", "Entry Signal",
       "Order Type", "SL Management", "TP Management", "Setup Grade",
