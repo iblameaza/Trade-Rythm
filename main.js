@@ -38,48 +38,45 @@ const DEFAULT_SETTINGS = {
   dashboardAccount: "",
   tableFontSize: "12",
   columns: [
-    "Symbol", "Direction", "Account", "Type of Trade", "Entry TimeFrame",
-    "Entry Signal", "Market Conditions", "Key Levels", "Confluences",
-    "Session", "Model", "Bias", "Order Type", "S/L Pips", "% Risk",
-    "Status", "Entry / Exit Date",
-    "Gross PnL", "Net PnL", "Setup Grade", "SL Management", "TP Management",
-    "Max RR reached", "Actual RR achieved: W(+1), L(-1), BE(0)",
-    "Outcome", "#Hour", "#Day", "#Month", "#Year", "#Duration in Minutes",
-    "Backtest?", "Fees", "News Impact", "Mistakes", "Bias Review",
-    "Entry Performance", "Psychology Tracker",
-    "Weekly Report",
-    "Entry / Exit Date (end)", "No-Explanation?"
+    "Status", "Account", "Model", "Symbol", "Position",
+    "Entry / Exit Date", "News Impact", "Bias", "Market Conditions",
+    "Type of Trade", "Entry TimeFrame", "Confluences", "Key Levels",
+    "Entry Signal", "Order Type", "S/L Pips", "% Risk",
+    "SL Management", "Max RR reached", "Actual RR achieved",
+    "TP Management", "Gross PnL", "Fees", "Net PnL",
+    "Setup Grade", "Mistakes", "No Explanation?",
+    "Bias Review", "Entry Performance", "Psychology Tracker",
+    "Weekly Report"
   ],
   templateYaml: [
-    '"Position": "Buy / Sell"',
-    '"Symbol": ""',
-    '"Model": ""',
-    '"Account": ""',
-    '"Session": ""',
     '"Status": "Open / Closed"',
-    '"Type of Trade": ""',
-    '"Entry TimeFrame": ""',
-    '"Entry Signal": ""',
-    '"Bias": ""',
-    '"Order Type": ""',
-    '"Setup Grade": ""',
-    '"Market Conditions": ""',
-    '"Key Levels": ""',
-    '"Confluences": ""',
-    '"SL Management": ""',
-    '"TP Management": ""',
-    '"News Impact": ""',
-    '"Mistakes": ""',
-    '"S/L Pips": 0',
-    '"% Risk": 0',
-    '"Fees": 0',
-    '"Gross PnL": 0',
-    '"Net PnL": 0',
-    '"Max RR reached": 0',
-    '"Actual RR achieved": ""',
+    '"Account": ""',
+    '"Model": ""',
+    '"Symbol": ""',
+    '"Position": "Long / Short"',
     '"Entry / Exit Date": "{{date}}"',
     '"Entry / Exit Date (end)": null',
-    '"No-Explanation?": false',
+    '"News Impact": ""',
+    '"Bias": ""',
+    '"Market Conditions": ""',
+    '"Type of Trade": ""',
+    '"Entry TimeFrame": ""',
+    '"Confluences": ""',
+    '"Key Levels": ""',
+    '"Entry Signal": ""',
+    '"Order Type": ""',
+    '"S/L Pips": 0',
+    '"% Risk": 0',
+    '"SL Management": ""',
+    '"Max RR reached": 0',
+    '"Actual RR achieved": ""',
+    '"TP Management": ""',
+    '"Gross PnL": 0',
+    '"Fees": 0',
+    '"Net PnL": 0',
+    '"Setup Grade": ""',
+    '"Mistakes": []',
+    '"No Explanation?": false,
     '"Bias Review": ""',
     '"Entry Performance": ""',
     '"Psychology Tracker": ""',
@@ -948,9 +945,11 @@ class DatabaseView extends ItemView {
 
         td.addEventListener("click", (e) => {
           e.stopPropagation();
-          const readonly = ["Gross PnL", "Fees", "S/L Pips", "% Risk", "Max RR reached", "Actual RR achieved: W(+1), L(-1), BE(0)", "Entry / Exit Date", "Entry / Exit Date (end)"];
-          if (readonly.includes(col)) return;
-          const editable = ["Status", "Account", "Model", "Session", "Symbol", "Entry TimeFrame", "Entry Signal", "Setup Grade", "Type of Trade", "Order Type", "Market Conditions", "SL Management", "TP Management", "News Impact", "Confluences", "Key Levels", "Mistakes", "Direction"];
+          const editable = ["Status", "Account", "Model", "Symbol", "Position",
+            "News Impact", "Bias", "Market Conditions", "Type of Trade",
+            "Entry TimeFrame", "Confluences", "Key Levels", "Entry Signal",
+            "Order Type", "SL Management", "TP Management", "Setup Grade",
+            "Mistakes", "No Explanation?", "Bias Review"];
           if (editable.includes(col)) {
             this.openTradePanel(trade, col);
           }
@@ -1041,33 +1040,37 @@ class DatabaseView extends ItemView {
 
   getCellValue(trade, col) {
     switch (col) {
-      case "Entry / Exit Date": return trade.date;
-      case "Symbol": return trade.symbol;
-      case "Model": return trade.model;
-      case "Direction": return trade.direction;
       case "Status": return trade.status;
-      case "Gross PnL": return trade.pnl;
-      case "Net PnL": return trade.netPnl;
-      case "Session": return trade.session;
-      case "Setup Grade": return trade.setupGrade;
       case "Account": return trade.account;
-      case "Type of Trade": return trade.tradeType;
-      case "Order Type": return trade.orderType;
-      case "Entry Signal": return trade.entrySignal || "";
-      case "Market Conditions": return trade.marketConditions || "";
-      case "SL Management": return trade.slManagement || "";
-      case "TP Management": return trade.tpManagement || "";
+      case "Model": return trade.model;
+      case "Symbol": return trade.symbol;
+      case "Position": return trade.direction;
+      case "Entry / Exit Date": return trade.date;
       case "News Impact": return trade.newsImpact || "";
-      case "Mistakes": return trade.mistakesStr;
+      case "Bias": return trade.bias || "";
+      case "Market Conditions": return trade.marketConditions || "";
+      case "Type of Trade": return trade.tradeType;
+      case "Entry TimeFrame": return trade.entryTimeframe || "";
       case "Confluences": return trade.confluencesStr;
       case "Key Levels": return trade.keyLevelsStr;
-      case "Outcome": return trade.outcome || "";
-      case "#Hour": return trade.hour !== null ? String(trade.hour) : "";
-      case "#Day": return trade.day || "";
-      case "#Month": return trade.month || "";
-      case "#Year": return trade.year !== null ? String(trade.year) : "";
-      case "#Duration in Minutes": return trade.durationMinutes !== null ? String(trade.durationMinutes) : "";
-      case "Backtest?": return trade.backtestFlag ? "Yes" : "No";
+      case "Entry Signal": return trade.entrySignal || "";
+      case "Order Type": return trade.orderType;
+      case "S/L Pips": return trade.slPips !== null ? trade.slPips : "";
+      case "% Risk": return trade.percentRisk !== null ? trade.percentRisk : "";
+      case "SL Management": return trade.slManagement || "";
+      case "Max RR reached": return trade.maxRr !== null ? trade.maxRr : "";
+      case "Actual RR achieved": return trade.actualRr || "";
+      case "TP Management": return trade.tpManagement || "";
+      case "Gross PnL": return trade.pnl;
+      case "Fees": return trade.fees !== null ? trade.fees : "";
+      case "Net PnL": return trade.netPnl;
+      case "Setup Grade": return trade.setupGrade;
+      case "Mistakes": return trade.mistakesStr;
+      case "No Explanation?": return trade.noExplanation ? "Yes" : "No";
+      case "Bias Review": return trade.biasReview || "";
+      case "Entry Performance": return trade.entryPerformance || "";
+      case "Psychology Tracker": return trade.psychologyTracker || "";
+      case "Weekly Report": return trade.weeklyReport || "";
       default: {
         const fm = trade.frontmatter;
         const raw = fm[col];
@@ -1081,14 +1084,13 @@ class DatabaseView extends ItemView {
 
   async getSetupOptions(col) {
     const map = {
-      Account: "accounts", Model: "models", Session: "sessions", Symbol: "symbols",
-      "Entry TimeFrame": "entryTimeframes", "Entry Signal": "entrySignals",
-      "Market Conditions": "marketConditions", "SL Management": "slManagement",
-      "TP Management": "tpManagement", "News Impact": "newsImpact",
-      "Type of Trade": "typesOfTrade", "Order Type": "orderTypes",
-      "Setup Grade": "setupGrades", Confluences: "confluences",
-      "Key Levels": "keyLevels", Mistakes: "mistakes",
-      Direction: "positions",
+      Account: "accounts", Model: "models", Symbol: "symbols",
+      Position: "positions", "Entry TimeFrame": "entryTimeframes",
+      "Entry Signal": "entrySignals", "Market Conditions": "marketConditions",
+      "SL Management": "slManagement", "TP Management": "tpManagement",
+      "News Impact": "newsImpact", "Type of Trade": "typesOfTrade",
+      "Order Type": "orderTypes", "Setup Grade": "setupGrades",
+      Confluences: "confluences", "Key Levels": "keyLevels", Mistakes: "mistakes",
     };
     const cat = map[col];
     if (!cat) return null;
@@ -1096,7 +1098,7 @@ class DatabaseView extends ItemView {
   }
 
   isMultiColumn(col) {
-    const map = { Confluences: "confluences", "Key Levels": "keyLevels", Mistakes: "mistakes", "Entry Signal": "entrySignals" };
+    const map = { Confluences: "confluences", "Key Levels": "keyLevels", Mistakes: "mistakes" };
     const cat = map[col];
     return cat ? (SETUP_CATEGORIES[cat]?.multi || false) : false;
   }
@@ -1134,10 +1136,11 @@ class DatabaseView extends ItemView {
   async openTradePanel(trade, focusCol) {
     this.cleanupEditor();
 
-    const editableCols = ["Status", "Account", "Model", "Session", "Symbol",
-      "Entry TimeFrame", "Entry Signal", "Setup Grade", "Type of Trade",
-      "Order Type", "Market Conditions", "SL Management", "TP Management",
-      "News Impact", "Confluences", "Key Levels", "Direction"];
+    const editableCols = ["Status", "Account", "Model", "Symbol", "Position",
+      "News Impact", "Bias", "Market Conditions", "Type of Trade",
+      "Entry TimeFrame", "Confluences", "Key Levels", "Entry Signal",
+      "Order Type", "SL Management", "TP Management", "Setup Grade",
+      "Mistakes", "No Explanation?", "Bias Review"];
 
     const pending = {};
 
