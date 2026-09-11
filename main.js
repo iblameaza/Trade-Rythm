@@ -483,11 +483,17 @@ class DatabaseView extends ItemView {
 
     const header = this.containerEl.createEl("div", { cls: "tj-header" });
     header.createEl("h2", { text: "Trade Rythm" });
-    const kofi = header.createEl("a", {
+    const headerBtns = header.createEl("div", { cls: "tj-header-btns" });
+    const kofi = headerBtns.createEl("a", {
       cls: "tj-kofi",
-      attr: { href: "https://ko-fi.com/iblameaza", target: "_blank", title: "Support me on Ko-fi" },
+      attr: { href: "https://ko-fi.com/iblameaza", target: "_blank", title: "Support this Project" },
     });
-    kofi.innerHTML = '☕ <span>Support me</span>';
+    kofi.innerHTML = '☕ <span>Support this Project</span>';
+    const discord = headerBtns.createEl("a", {
+      cls: "tj-kofi",
+      attr: { href: "https://discord.gg/C8XaTb2t4Q", target: "_blank", title: "Join the Community" },
+    });
+    discord.innerHTML = '💬 <span>Join the Community</span>';
 
     const tabBar = this.containerEl.createEl("div", { cls: "tj-tabs" });
     this.tabTrades = tabBar.createEl("button", {
@@ -1113,6 +1119,8 @@ class DatabaseView extends ItemView {
   cleanupEditor() {
     const p = document.querySelector(".tj-trade-panel");
     if (p && p.parentNode) p.parentNode.removeChild(p);
+    const bd = document.querySelector(".tj-trade-backdrop");
+    if (bd && bd.parentNode) bd.parentNode.removeChild(bd);
     this._ed = null;
   }
 
@@ -1137,6 +1145,7 @@ class DatabaseView extends ItemView {
   }
 
   async openTradePanel(trade, focusCol) {
+    closeExistingModals();
     this.cleanupEditor();
 
     const editableCols = ["Status", "Account", "Model", "Symbol", "Position", "Direction",
@@ -1147,10 +1156,11 @@ class DatabaseView extends ItemView {
 
     const pending = {};
 
+    const backdrop = document.body.createEl("div", { cls: "tj-trade-backdrop" });
     const panel = document.body.createEl("div", { cls: "tj-trade-panel" });
-    this._ed = { panel };
+    this._ed = { panel, backdrop };
 
-    const closePanel = () => { this.cleanupEditor(); panel.remove(); };
+    const closePanel = () => { this.cleanupEditor(); panel.remove(); backdrop.remove(); };
 
     const header = panel.createEl("div", { cls: "tj-panel-header" });
     header.createEl("span", { text: `Trade #${trade.tradeNum}` });
@@ -1194,6 +1204,11 @@ class DatabaseView extends ItemView {
           activeEditors.delete(row);
           row.removeClass("tj-panel-row-open");
         };
+        const confirmEdit = () => {
+          editor.remove();
+          activeEditors.delete(row);
+          row.removeClass("tj-panel-row-open");
+        };
 
         const linkResults = await Promise.all(options.map((o) => this.getOptionWikilinks(o.path)));
 
@@ -1233,7 +1248,7 @@ class DatabaseView extends ItemView {
         closeBtn.addEventListener("mousedown", (e) => {
           e.preventDefault();
           e.stopPropagation();
-          cancelEdit();
+          confirmEdit();
         });
       });
     }
@@ -1575,19 +1590,30 @@ class DatabaseView extends ItemView {
   }
 }
 
+// ─── Close any open modal panels ─────────────────────────
+function closeExistingModals() {
+  document.querySelectorAll(".tj-glass-modal").forEach((el) => el.remove());
+  document.querySelectorAll(".tj-trade-backdrop").forEach((el) => el.remove());
+  document.querySelectorAll(".tj-trade-panel").forEach((el) => el.remove());
+}
+
 // ─── Guide Modal ──────────────────────────────────────
-class GuideModal extends Modal {
+class GuideModal {
   constructor(app, plugin) {
-    super(app);
+    this.app = app;
     this.plugin = plugin;
   }
 
-  onOpen() {
-    const { contentEl } = this;
-    this.containerEl.addClass("tj-glass");
-    this.containerEl.addClass("tj-guide-glass");
-    contentEl.addClass("tj-guide-modal");
-    contentEl.createEl("h2", { text: "Trade Rythm Guide" });
+  open() {
+    closeExistingModals();
+    this._backdrop = document.body.createEl("div", { cls: "tj-trade-backdrop" });
+    this._panel = document.body.createEl("div", { cls: "tj-glass-modal tj-guide-glass" });
+    this._backdrop.addEventListener("click", () => this.close());
+
+    const c = this._panel;
+    c.createEl("div", { cls: "tj-modal-close", text: "✕" })
+      .addEventListener("click", () => this.close());
+    c.createEl("h2", { text: "Trade Rythm Guide" });
 
     const sections = [
       {
@@ -1664,44 +1690,47 @@ class GuideModal extends Modal {
     ];
 
     sections.forEach((section) => {
-      const h3 = contentEl.createEl("h3", { text: section.title });
-      h3.style.marginTop = "16px";
-      const ul = contentEl.createEl("ul");
+      c.createEl("h3", { text: section.title });
+      const ul = c.createEl("ul");
       section.content.forEach((item) => {
         ul.createEl("li", { text: item });
       });
     });
 
-    const closeBtn = contentEl.createEl("div", { cls: "tj-modal-btns" });
-    closeBtn.createEl("button", { text: "Close", cls: "tj-btn tj-btn-primary" })
+    const btnsEl = c.createEl("div", { cls: "tj-modal-btns" });
+    btnsEl.createEl("button", { text: "Close", cls: "tj-btn tj-btn-primary" })
       .addEventListener("click", () => this.close());
   }
 
-  onClose() {
-    this.contentEl.empty();
+  close() {
+    if (this._backdrop) this._backdrop.remove();
+    if (this._panel) this._panel.remove();
   }
 }
 
 // ─── Confirm Modal ──────────────────────────────────────
-class ConfirmModal extends Modal {
+class ConfirmModal {
   constructor(app, title, message, onConfirm, onCancel) {
-    super(app);
+    this.app = app;
     this.title = title;
     this.message = message;
     this.onConfirm = onConfirm;
     this.onCancel = onCancel;
   }
 
-  onOpen() {
-    const { contentEl } = this;
-    this.containerEl.addClass("tj-glass");
-    contentEl.empty();
-    contentEl.addClass("tj-modal");
+  open() {
+    closeExistingModals();
+    this._backdrop = document.body.createEl("div", { cls: "tj-trade-backdrop" });
+    this._panel = document.body.createEl("div", { cls: "tj-glass-modal" });
+    this._backdrop.addEventListener("click", () => this.close());
 
-    contentEl.createEl("h2", { text: this.title });
-    contentEl.createEl("p", { text: this.message });
+    const c = this._panel;
+    c.createEl("div", { cls: "tj-modal-close", text: "✕" })
+      .addEventListener("click", () => this.close());
+    c.createEl("h2", { text: this.title });
+    c.createEl("p", { text: this.message });
 
-    const btns = contentEl.createEl("div", { cls: "tj-modal-btns" });
+    const btns = c.createEl("div", { cls: "tj-modal-btns" });
     btns.createEl("button", { text: "Cancel", cls: "tj-btn" })
       .addEventListener("click", () => {
         this.close();
@@ -1714,15 +1743,16 @@ class ConfirmModal extends Modal {
       });
   }
 
-  onClose() {
-    this.contentEl.empty();
+  close() {
+    if (this._backdrop) this._backdrop.remove();
+    if (this._panel) this._panel.remove();
   }
 }
 
 // ─── Setup Modal ───────────────────────────────────────
-class SettingsModal extends Modal {
+class SettingsModal {
   constructor(app, plugin) {
-    super(app);
+    this.app = app;
     this.plugin = plugin;
   }
 
@@ -1732,17 +1762,24 @@ class SettingsModal extends Modal {
     return sym + Number(val).toFixed(2);
   }
 
+  open() {
+    closeExistingModals();
+    this._backdrop = document.body.createEl("div", { cls: "tj-trade-backdrop" });
+    this._panel = document.body.createEl("div", { cls: "tj-glass-modal tj-settings-glass" });
+    this._backdrop.addEventListener("click", () => this.close());
+    this.onOpen();
+  }
+
   async onOpen() {
-    const { contentEl } = this;
-    this.containerEl.addClass("tj-glass");
-    this.containerEl.addClass("tj-settings-glass");
-    contentEl.empty();
-    contentEl.addClass("tj-modal");
-    contentEl.createEl("h2", { text: "Trading Settings" });
+    this._panel.empty();
+    const c = this._panel;
+    c.createEl("div", { cls: "tj-modal-close", text: "✕" })
+      .addEventListener("click", () => this.close());
+    c.createEl("h2", { text: "Trading Settings" });
 
     for (const [key, cfg] of Object.entries(SETUP_CATEGORIES)) {
       const items = await this.plugin.getSetupItems(key);
-      const sec = contentEl.createEl("div", { cls: "tj-setup-section" });
+      const sec = c.createEl("div", { cls: "tj-setup-section" });
       sec.createEl("h3", { text: cfg.label });
 
       if (key === "accounts") {
@@ -1753,7 +1790,7 @@ class SettingsModal extends Modal {
     }
 
     // Checklist Templates section
-    const ctSec = contentEl.createEl("div", { cls: "tj-setup-section" });
+    const ctSec = c.createEl("div", { cls: "tj-setup-section" });
     ctSec.createEl("h3", { text: "Checklist Templates" });
     ctSec.createEl("p", { text: "Add checklist items for new trades. Each item becomes a checkbox.", cls: "setting-item-description" });
 
@@ -1767,62 +1804,60 @@ class SettingsModal extends Modal {
     for (const field of checklistFields) {
       const sec = ctSec.createEl("div", { cls: "tj-ct-field" });
       sec.createEl("label", { text: field.label, cls: "tj-ct-label" });
-      
-      // Add input RIGHT BELOW title
+
       const addRow = sec.createEl("div", { cls: "tj-ct-add-row" });
       const input = addRow.createEl("input", {
         cls: "tj-ct-input",
         attr: { type: "text", placeholder: "Add item..." }
       });
       const addBtn = addRow.createEl("button", { text: "+", cls: "tj-btn tj-btn-sm tj-btn-primary" });
-      
+
       const list = sec.createEl("ul", { cls: "tj-ct-list" });
       const items = ct[field.key] || [];
-      
+
       const createDraggableItem = (item, idx) => {
         const li = list.createEl("li", { cls: "tj-ct-item", attr: { draggable: "true" } });
         li.createEl("span", { text: "⠿", cls: "tj-ct-drag-handle" });
         li.createEl("span", { text: item, cls: "tj-ct-item-text" });
         const delBtn = li.createEl("button", { text: "✕", cls: "tj-btn tj-btn-sm tj-btn-danger" });
-        
+
         li.addEventListener("dragstart", (e) => {
           li.addClass("dragging");
           e.dataTransfer.setData("text/plain", idx);
           e.dataTransfer.effectAllowed = "move";
         });
-        
+
         li.addEventListener("dragend", () => {
           li.removeClass("dragging");
           list.querySelectorAll(".tj-ct-item").forEach((el) => el.removeClass("drag-over"));
         });
-        
+
         li.addEventListener("dragover", (e) => {
           e.preventDefault();
           e.dataTransfer.dropEffect = "move";
           li.addClass("drag-over");
         });
-        
+
         li.addEventListener("dragleave", () => {
           li.removeClass("drag-over");
         });
-        
+
         li.addEventListener("drop", async (e) => {
           e.preventDefault();
           li.removeClass("drag-over");
           const fromIdx = parseInt(e.dataTransfer.getData("text/plain"));
           const toIdx = idx;
           if (fromIdx === toIdx) return;
-          
+
           const movedItem = items.splice(fromIdx, 1)[0];
           items.splice(toIdx, 0, movedItem);
           this.plugin.settings.templateChecklists[field.key] = items;
           await this.plugin.saveSettings();
-          
-          // Re-render list
+
           list.empty();
           items.forEach((item, i) => createDraggableItem(item, i));
         });
-        
+
         delBtn.addEventListener("click", async () => {
           items.splice(idx, 1);
           this.plugin.settings.templateChecklists[field.key] = items;
@@ -1830,9 +1865,9 @@ class SettingsModal extends Modal {
           li.remove();
         });
       };
-      
+
       items.forEach((item, idx) => createDraggableItem(item, idx));
-      
+
       const addItem = async () => {
         const val = input.value.trim();
         if (!val) return;
@@ -1846,8 +1881,8 @@ class SettingsModal extends Modal {
       input.addEventListener("keydown", (e) => { if (e.key === "Enter") addItem(); });
     }
 
-    const closeBtn = contentEl.createEl("div", { cls: "tj-modal-btns" });
-    closeBtn.createEl("button", { text: "Close", cls: "tj-btn" })
+    const btnsEl = c.createEl("div", { cls: "tj-modal-btns" });
+    btnsEl.createEl("button", { text: "Close", cls: "tj-btn" })
       .addEventListener("click", () => this.close());
   }
 
@@ -1873,7 +1908,7 @@ class SettingsModal extends Modal {
     const hdr = tbl.createEl("thead").createEl("tr");
     ["⠿", "Name", "Balance", "Currency", "Type", ""].forEach((t) => hdr.createEl("th", { text: t }));
     const bdy = tbl.createEl("tbody");
-    
+
     for (const item of items) {
       const fm = await this.plugin.readSetupFileYaml("accounts", item.name);
       const bal = fm?.initialBalance || "0";
@@ -1886,44 +1921,44 @@ class SettingsModal extends Modal {
       row.createEl("td", { text: cur });
       row.createEl("td", { text: typ });
       const del = row.createEl("td").createEl("button", { text: "✕", cls: "tj-btn tj-btn-sm tj-btn-danger" });
-      
+
       row.addEventListener("dragstart", (e) => {
         row.addClass("dragging");
         e.dataTransfer.setData("text/plain", item.name);
         e.dataTransfer.effectAllowed = "move";
       });
-      
+
       row.addEventListener("dragend", () => {
         row.removeClass("dragging");
         bdy.querySelectorAll("tr").forEach((el) => el.removeClass("drag-over"));
       });
-      
+
       row.addEventListener("dragover", (e) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
         row.addClass("drag-over");
       });
-      
+
       row.addEventListener("dragleave", () => {
         row.removeClass("drag-over");
       });
-      
+
       row.addEventListener("drop", async (e) => {
         e.preventDefault();
         row.removeClass("drag-over");
         const fromName = e.dataTransfer.getData("text/plain");
         const toName = item.name;
         if (fromName === toName) return;
-        
+
         const fromIdx = items.findIndex((i) => i.name === fromName);
         const toIdx = items.findIndex((i) => i.name === toName);
         if (fromIdx === -1 || toIdx === -1) return;
-        
+
         const movedItem = items.splice(fromIdx, 1)[0];
         items.splice(toIdx, 0, movedItem);
         this.onOpen();
       });
-      
+
       del.addEventListener("click", async () => {
         await this.plugin.deleteSetupItem("accounts", item.name);
         this.onOpen();
@@ -1935,63 +1970,62 @@ class SettingsModal extends Modal {
     const addRow = sec.createEl("div", { cls: "tj-setup-add-row" });
     const input = addRow.createEl("input", { cls: "tj-sm-input", attr: { type: "text", placeholder: `Add ${SETUP_CATEGORIES[key].label.slice(0, -1)}...` } });
     const addBtn = addRow.createEl("button", { text: "Add", cls: "tj-btn tj-btn-sm tj-btn-primary" });
-    
+
     const list = sec.createEl("ul", { cls: "tj-setup-list" });
-    
+
     const createDraggableItem = (item) => {
       const li = list.createEl("li", { attr: { draggable: "true" } });
       li.createEl("span", { text: "⠿", cls: "tj-ct-drag-handle" });
       li.createEl("span", { text: item.name, cls: "tj-ct-item-text" });
       const del = li.createEl("button", { text: "✕", cls: "tj-btn tj-btn-sm tj-btn-danger" });
-      
+
       li.addEventListener("dragstart", (e) => {
         li.addClass("dragging");
         e.dataTransfer.setData("text/plain", item.name);
         e.dataTransfer.effectAllowed = "move";
       });
-      
+
       li.addEventListener("dragend", () => {
         li.removeClass("dragging");
         list.querySelectorAll("li").forEach((el) => el.removeClass("drag-over"));
       });
-      
+
       li.addEventListener("dragover", (e) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
         li.addClass("drag-over");
       });
-      
+
       li.addEventListener("dragleave", () => {
         li.removeClass("drag-over");
       });
-      
+
       li.addEventListener("drop", async (e) => {
         e.preventDefault();
         li.removeClass("drag-over");
         const fromName = e.dataTransfer.getData("text/plain");
         const toName = item.name;
         if (fromName === toName) return;
-        
+
         const fromIdx = items.findIndex((i) => i.name === fromName);
         const toIdx = items.findIndex((i) => i.name === toName);
         if (fromIdx === -1 || toIdx === -1) return;
-        
+
         const movedItem = items.splice(fromIdx, 1)[0];
         items.splice(toIdx, 0, movedItem);
-        
-        // Re-render list
+
         list.empty();
         items.forEach((i) => createDraggableItem(i));
       });
-      
+
       del.addEventListener("click", async () => {
         await this.plugin.deleteSetupItem(key, item.name);
         this.onOpen();
       });
     };
-    
+
     items.forEach((item) => createDraggableItem(item));
-    
+
     addBtn.addEventListener("click", async () => {
       const name = input.value.trim();
       if (!name) return;
@@ -2002,8 +2036,9 @@ class SettingsModal extends Modal {
     input.addEventListener("keydown", (e) => { if (e.key === "Enter") addBtn.click(); });
   }
 
-  onClose() {
-    this.contentEl.empty();
+  close() {
+    if (this._backdrop) this._backdrop.remove();
+    if (this._panel) this._panel.remove();
   }
 }
 
