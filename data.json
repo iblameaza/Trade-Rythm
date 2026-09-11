@@ -1,8 +1,8 @@
 {
-  "tradeFolder": "Private Github/Trades Journal",
-  "backtestFolder": "Private Github/Backtest Journal",
+  "tradeFolder": "Trades Journal",
+  "backtestFolder": "Backtest Journal",
   "attachmentsFolder": "attachments",
-  "setupFolder": "Private Github/Trading Settings",
+  "setupFolder": "Trading Settings",
   "previewMode": "live",
   "dashboardAccount": "",
   "tableFontSize": "12",

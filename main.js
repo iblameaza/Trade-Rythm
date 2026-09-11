@@ -30,10 +30,10 @@ const SETUP_CATEGORIES = {
 };
 
 const DEFAULT_SETTINGS = {
-  tradeFolder: "Private Github/Trades Journal",
-  backtestFolder: "Private Github/Backtest Journal",
+  tradeFolder: "Trades Journal",
+  backtestFolder: "Backtest Journal",
   attachmentsFolder: "attachments",
-  setupFolder: "Private Github/Trading Settings",
+  setupFolder: "Trading Settings",
   previewMode: "live",
   dashboardAccount: "",
   tableFontSize: "12",
@@ -105,36 +105,7 @@ class TradeRythmPlugin extends Plugin {
     // Show welcome message on first install
     const isFirstInstall = !this.settings._installed;
     if (isFirstInstall) {
-      // Ask user consent before creating folders
-      const tradeExists = await this.app.vault.adapter.exists(this.settings.tradeFolder);
-      const backtestExists = await this.app.vault.adapter.exists(this.settings.backtestFolder);
-      const setupExists = await this.app.vault.adapter.exists(this.settings.setupFolder);
-      
-      if (!tradeExists || !backtestExists || !setupExists) {
-        // Show confirmation modal
-        new ConfirmModal(
-          this.app,
-          "Trade Rythm Setup",
-          "Trade Rythm needs to create trading folders in your vault:\n\n" +
-          `- ${this.settings.tradeFolder}\n` +
-          `- ${this.settings.backtestFolder}\n` +
-          `- ${this.settings.setupFolder}\n\n` +
-          "Create these folders?",
-          async () => {
-            await this.ensureTradeFolders();
-            await this.initSetupFolders();
-            this.settings._installed = true;
-            await this.saveSettings();
-            new Notice("Trade Rythm: Folders created successfully!");
-          },
-          () => {
-            new Notice("Trade Rythm: Skipped folder creation. You can create them manually in Settings.");
-          }
-        ).open();
-      } else {
-        this.settings._installed = true;
-        await this.saveSettings();
-      }
+      new FirstInstallModal(this.app, this).open();
     }
 
     this.addRibbonIcon("dollar-sign", "Trade Rythm", () => this.activateView());
@@ -318,36 +289,7 @@ class TradeRythmPlugin extends Plugin {
   }
 
   async detectFolderPaths() {
-    try {
-      // Scan for renamed folders and update settings if needed
-      const pgPath = "Private Github";
-      const entries = await this.app.vault.adapter.list(pgPath);
-      
-      for (const entry of entries.folders) {
-        const folderName = entry.split("/").pop();
-        
-        // Check for common renames
-        if (folderName.includes("Trades Journal") && !this.settings.tradeFolder.includes(folderName)) {
-          this.settings.tradeFolder = `${pgPath}/${folderName}`;
-          await this.saveSettings();
-          console.log(`Trade Rythm: Updated trades folder to ${folderName}`);
-        }
-        
-        if (folderName.includes("Backtest Journal") && !this.settings.backtestFolder.includes(folderName)) {
-          this.settings.backtestFolder = `${pgPath}/${folderName}`;
-          await this.saveSettings();
-          console.log(`Trade Rythm: Updated backtest folder to ${folderName}`);
-        }
-        
-        if (folderName.includes("Trading Settings") && !this.settings.setupFolder.includes(folderName)) {
-          this.settings.setupFolder = `${pgPath}/${folderName}`;
-          await this.saveSettings();
-          console.log(`Trade Rythm: Updated setup folder to ${folderName}`);
-        }
-      }
-    } catch (e) {
-      console.log("Trade Rythm: folder detection skipped:", e.message);
-    }
+    // No-op: users configure their own folder paths in Settings
   }
 
   // ─── Setup Folder Helpers ────────────────────
@@ -1595,6 +1537,70 @@ function closeExistingModals() {
   document.querySelectorAll(".tj-glass-modal").forEach((el) => el.remove());
   document.querySelectorAll(".tj-trade-backdrop").forEach((el) => el.remove());
   document.querySelectorAll(".tj-trade-panel").forEach((el) => el.remove());
+}
+
+// ─── First Install Modal ──────────────────────────────
+class FirstInstallModal {
+  constructor(app, plugin) {
+    this.app = app;
+    this.plugin = plugin;
+  }
+
+  open() {
+    closeExistingModals();
+    this._backdrop = document.body.createEl("div", { cls: "tj-trade-backdrop" });
+    this._panel = document.body.createEl("div", { cls: "tj-glass-modal" });
+    this._backdrop.addEventListener("click", () => this.close());
+
+    const c = this._panel;
+    c.createEl("div", { cls: "tj-modal-close", text: "✕" })
+      .addEventListener("click", () => this.close());
+    c.createEl("h2", { text: "Trade Rythm Setup" });
+    c.createEl("p", { text: "Choose where to store your trading data. You can change these later in Settings." });
+
+    const fields = [
+      { key: "tradeFolder", label: "Live Trades Folder", default: "Trades Journal" },
+      { key: "backtestFolder", label: "Backtest Trades Folder", default: "Backtest Journal" },
+      { key: "setupFolder", label: "Trading Settings Folder", default: "Trading Settings" }
+    ];
+
+    const inputs = {};
+    for (const field of fields) {
+      const row = c.createEl("div", { cls: "tj-setup-add-row" });
+      row.createEl("label", { text: field.label, cls: "tj-ct-label" });
+      inputs[field.key] = row.createEl("input", {
+        cls: "tj-sm-input",
+        attr: { type: "text", value: field.default }
+      });
+    }
+
+    const btns = c.createEl("div", { cls: "tj-modal-btns" });
+    btns.createEl("button", { text: "Create Folders", cls: "tj-btn tj-btn-primary" })
+      .addEventListener("click", async () => {
+        this.plugin.settings.tradeFolder = inputs.tradeFolder.value.trim() || "Trades Journal";
+        this.plugin.settings.backtestFolder = inputs.backtestFolder.value.trim() || "Backtest Journal";
+        this.plugin.settings.setupFolder = inputs.setupFolder.value.trim() || "Trading Settings";
+        await this.plugin.saveSettings();
+        await this.plugin.ensureTradeFolders();
+        await this.plugin.initSetupFolders();
+        this.plugin.settings._installed = true;
+        await this.plugin.saveSettings();
+        new Notice("Trade Rythm: Folders created successfully!");
+        this.close();
+      });
+    btns.createEl("button", { text: "Skip", cls: "tj-btn" })
+      .addEventListener("click", async () => {
+        this.plugin.settings._installed = true;
+        await this.plugin.saveSettings();
+        new Notice("Trade Rythm: Skipped. You can set up folders in Settings.");
+        this.close();
+      });
+  }
+
+  close() {
+    if (this._backdrop) this._backdrop.remove();
+    if (this._panel) this._panel.remove();
+  }
 }
 
 // ─── Guide Modal ──────────────────────────────────────
