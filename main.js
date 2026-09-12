@@ -386,10 +386,26 @@ class TradeRythmPlugin extends Plugin {
     const folderPath = this.getSetupFolderPath(category);
     if (!folderPath) return null;
     const filePath = `${folderPath}/${name}.md`;
-    const file = this.app.vault.getAbstractFileByPath(filePath);
-    if (!file) return null;
-    const cache = this.app.metadataCache.getFileCache(file);
-    return cache?.frontmatter || null;
+    try {
+      const raw = await this.app.vault.adapter.read(filePath);
+      const match = raw.match(/^---\n([\s\S]*?)\n---/);
+      if (!match) return null;
+      const fm = {};
+      for (const line of match[1].split("\n")) {
+        const idx = line.indexOf(":");
+        if (idx === -1) continue;
+        const key = line.slice(0, idx).trim();
+        let val = line.slice(idx + 1).trim();
+        if (val === "true") val = true;
+        else if (val === "false") val = false;
+        else if (val === "null") val = null;
+        else if (!isNaN(val) && val !== "") val = Number(val);
+        fm[key] = val;
+      }
+      return fm;
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -1895,7 +1911,7 @@ class SettingsModal {
   async renderAccountList(sec, items) {
     const addRow = sec.createEl("div", { cls: "tj-setup-add-row" });
     const nameI = addRow.createEl("input", { cls: "tj-sm-input", attr: { type: "text", placeholder: "Name" } });
-    const balI = addRow.createEl("input", { cls: "tj-sm-input", attr: { type: "number", placeholder: "Balance" } });
+    const balI = addRow.createEl("input", { cls: "tj-sm-input", attr: { type: "text", placeholder: "Balance" } });
     const curI = addRow.createEl("input", { cls: "tj-sm-input tj-sm-small", attr: { type: "text", placeholder: "USD", value: "USD" } });
     const typeS = addRow.createEl("select", { cls: "tj-sm-input tj-sm-small" });
     typeS.createEl("option", { text: "Live", value: "live" });
@@ -1904,7 +1920,7 @@ class SettingsModal {
     addBtn.addEventListener("click", async () => {
       const name = nameI.value.trim();
       if (!name) { new Notice("Name required"); return; }
-      await this.plugin.addSetupItem("accounts", name, { initialBalance: balI.value || "0", currency: curI.value.toUpperCase() || "USD", type: typeS.value });
+      await this.plugin.addSetupItem("accounts", name, { initialBalance: parseFloat(balI.value.replace(/,/g, ".").replace(/[^0-9.]/g, "")) || 0, currency: curI.value.toUpperCase() || "USD", type: typeS.value });
       nameI.value = ""; balI.value = ""; this.onOpen();
     });
 
@@ -2168,3 +2184,5 @@ class TradeRythmSettingsTab extends PluginSettingTab {
 
 // ─── Module Export ──────────────────────────────────────
 module.exports = TradeRythmPlugin;
+
+/* nosourcemap */
