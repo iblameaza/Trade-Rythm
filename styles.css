@@ -810,8 +810,7 @@
 
 /* ── Account Selector Popup ──────────────────── */
 .tj-account-popup {
-  position: absolute;
-  top: 100%; left: 0;
+  position: fixed;
   z-index: 1000;
   background: rgba(128, 128, 128, 0.12) !important;
   backdrop-filter: blur(20px) saturate(140%);

@@ -38,7 +38,7 @@ const DEFAULT_SETTINGS = {
   dashboardAccount: "",
   tableFontSize: "12",
   columns: [
-    "Status", "Account", "Model", "Symbol", "Position", "Direction",
+    "Status", "Account", "Model", "Symbol", "Position",
     "Entry / Exit Date", "News Impact", "Bias", "Market Conditions",
     "Type of Trade", "Entry TimeFrame", "Confluences", "Key Levels",
     "Entry Signal", "Order Type", "S/L Pips", "% Risk",
@@ -54,7 +54,6 @@ const DEFAULT_SETTINGS = {
     '"Model": ""',
     '"Symbol": ""',
     '"Position": "Long / Short"',
-    '"Direction": ""',
     '"Entry / Exit Date": "{{date}}"',
     '"Entry / Exit Date (end)": null',
     '"News Impact": ""',
@@ -446,12 +445,12 @@ class DatabaseView extends ItemView {
       cls: "tj-kofi",
       attr: { href: "https://ko-fi.com/iblameaza", target: "_blank", title: "Support this Project" },
     });
-    kofi.innerHTML = '☕ <span>Support this Project</span>';
+    kofi.innerHTML = '⚡ <span>Support this Project</span>';
     const discord = headerBtns.createEl("a", {
       cls: "tj-kofi",
-      attr: { href: "https://discord.gg/C8XaTb2t4Q", target: "_blank", title: "Join the Community" },
+      attr: { href: "https://discord.gg/C8XaTb2t4Q", target: "_blank", title: "Our Server" },
     });
-    discord.innerHTML = '💬 <span>Join the Community</span>';
+    discord.innerHTML = '🌐 <span>Our Server</span>';
 
     const tabBar = this.containerEl.createEl("div", { cls: "tj-tabs" });
     this.tabTrades = tabBar.createEl("button", {
@@ -515,14 +514,21 @@ class DatabaseView extends ItemView {
       if (this.activeTab !== "dashboard") return;
       const accounts = await this.plugin.getSetupItems("accounts");
       const current = this.plugin.settings.dashboardAccount || "";
-      const popup = this.accountBtn.createEl("div", { cls: "tj-account-popup" });
+      this.cleanupAccountPopup();
+      const popup = document.body.createEl("div", { cls: "tj-account-popup" });
+      this._accountPopup = popup;
+      const rect = this.accountBtn.getBoundingClientRect();
+      popup.style.top = rect.bottom + "px";
+      popup.style.left = rect.left + "px";
+      popup.style.minWidth = Math.max(rect.width, 150) + "px";
       const allItem = popup.createEl("div", { cls: "tj-account-item" + (!current ? " tj-account-sel" : "") });
       allItem.textContent = "All Accounts";
       allItem.addEventListener("mousedown", (e2) => {
         e2.preventDefault();
         this.plugin.settings.dashboardAccount = "";
         this.plugin.saveSettings();
-        popup.remove();
+        this.cleanupAccountPopup();
+        this.render();
       });
       for (const a of accounts) {
         const item = popup.createEl("div", { cls: "tj-account-item" + (a.name === current ? " tj-account-sel" : "") });
@@ -531,13 +537,15 @@ class DatabaseView extends ItemView {
           e2.preventDefault();
           this.plugin.settings.dashboardAccount = a.name;
           this.plugin.saveSettings();
-          popup.remove();
+          this.cleanupAccountPopup();
+          this.render();
         });
       }
       const closePopup = (e2) => {
-        if (!popup || popup.contains(e2.target)) return;
-        popup.remove();
-        document.removeEventListener("mousedown", closePopup, true);
+        if (popup && !popup.contains(e2.target)) {
+          this.cleanupAccountPopup();
+          document.removeEventListener("mousedown", closePopup, true);
+        }
       };
       document.addEventListener("mousedown", closePopup, true);
     });
@@ -584,6 +592,7 @@ class DatabaseView extends ItemView {
 
   async render() {
     this.cleanupEditor();
+    this.cleanupAccountPopup();
     if (this._rendering) return;
     this._rendering = true;
     try {
@@ -910,7 +919,7 @@ class DatabaseView extends ItemView {
 
         td.addEventListener("click", (e) => {
           e.stopPropagation();
-          const editable = ["Status", "Account", "Model", "Symbol", "Position", "Direction",
+          const editable = ["Status", "Account", "Model", "Symbol", "Position",
             "News Impact", "Bias", "Market Conditions", "Type of Trade",
             "Entry TimeFrame", "Confluences", "Key Levels", "Entry Signal",
             "Order Type", "SL Management", "TP Management", "Setup Grade",
@@ -975,7 +984,6 @@ class DatabaseView extends ItemView {
       "Entry / Exit Date": "date",
       Symbol: "symbol",
       Model: "model",
-      Direction: "direction",
       Status: "status",
       "Gross PnL": "pnl",
       "Net PnL": "netPnl",
@@ -1010,7 +1018,6 @@ class DatabaseView extends ItemView {
       case "Model": return trade.model;
       case "Symbol": return trade.symbol;
       case "Position": return trade.direction;
-      case "Direction": return trade.direction;
       case "Entry / Exit Date": return trade.date;
       case "News Impact": return trade.newsImpact || "";
       case "Bias": return trade.bias || "";
@@ -1046,12 +1053,16 @@ class DatabaseView extends ItemView {
     }
   }
 
-  static YAML_KEY_MAP = { Direction: "Position" };
-
   async getSetupOptions(col) {
+    if (col === "Status") {
+      return [
+        { name: "Open", path: "" },
+        { name: "Closed", path: "" },
+      ];
+    }
     const map = {
       Account: "accounts", Model: "models", Symbol: "symbols",
-      Position: "positions", Direction: "positions",
+      Position: "positions",
       "Entry TimeFrame": "entryTimeframes",
       "Entry Signal": "entrySignals", "Market Conditions": "marketConditions",
       "SL Management": "slManagement", "TP Management": "tpManagement",
@@ -1071,7 +1082,14 @@ class DatabaseView extends ItemView {
   }
 
   yamlKey(col) {
-    return DatabaseView.YAML_KEY_MAP[col] || col;
+    return col;
+  }
+
+  cleanupAccountPopup() {
+    if (this._accountPopup) {
+      this._accountPopup.remove();
+      this._accountPopup = null;
+    }
   }
 
   cleanupEditor() {
@@ -1106,7 +1124,7 @@ class DatabaseView extends ItemView {
     closeExistingModals();
     this.cleanupEditor();
 
-    const editableCols = ["Status", "Account", "Model", "Symbol", "Position", "Direction",
+    const editableCols = ["Status", "Account", "Model", "Symbol", "Position",
       "News Impact", "Bias", "Market Conditions", "Type of Trade",
       "Entry TimeFrame", "Confluences", "Key Levels", "Entry Signal",
       "Order Type", "SL Management", "TP Management", "Setup Grade",
@@ -1318,7 +1336,7 @@ class DatabaseView extends ItemView {
     const newPaths = new Set();
     const colCache = {};
 
-    for (const col of ["Account", "Model", "Session", "Symbol", "Direction",
+    for (const col of ["Account", "Model", "Session", "Symbol",
       "Entry TimeFrame", "Entry Signal", "Market Conditions", "SL Management", "TP Management",
       "News Impact", "Type of Trade", "Order Type", "Setup Grade", "Confluences", "Key Levels", "Mistakes"]) {
       const items = await this.getSetupOptions(col);
@@ -2185,4 +2203,5 @@ class TradeRythmSettingsTab extends PluginSettingTab {
 // ─── Module Export ──────────────────────────────────────
 module.exports = TradeRythmPlugin;
 
+/* nosourcemap */
 /* nosourcemap */
