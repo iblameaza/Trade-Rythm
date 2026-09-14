@@ -11,7 +11,7 @@ const VIEW_TYPE = "trade-rythm-db";
 // ─── Settings ───────────────────────────────────────────
 const SETUP_CATEGORIES = {
   accounts: { label: "Accounts", folder: "Accounts", hasYaml: true, multi: false, defaults: [] },
-  models: { label: "Models", folder: "Models", multi: false, defaults: [] },
+  models: { label: "Strategies", folder: "Strategies", multi: false, defaults: [] },
   sessions: { label: "Sessions", folder: "Sessions", multi: false, defaults: ["Asian", "London Open", "London Closed", "New York", "Out of Session"] },
   symbols: { label: "Symbols", folder: "Symbols", multi: false, defaults: ["BTC/USD", "SOL/USD", "EUR/USD", "GBP/USD", "USD/JPY", "USD/CAD", "AUD/USD", "NZD/USD", "USD/CHF", "XAU/USD"] },
   entryTimeframes: { label: "Entry Timeframes", folder: "Entry Timeframes", multi: false, defaults: ["1 minutes", "3 minutes", "5 minutes", "15 minutes", "30 minutes", "1 Hour", "3 Hour", "4 Hour", "1 Day"] },
@@ -27,6 +27,8 @@ const SETUP_CATEGORIES = {
   orderTypes: { label: "Order Types", folder: "Order Types", multi: false, defaults: ["Limit Order", "Market Order", "Stop Order"] },
   setupGrades: { label: "Setup Grades", folder: "Setup Grades", multi: false, defaults: ["A+", "A", "B", "C", "F"] },
   positions: { label: "Positions", folder: "Positions", multi: false, defaults: ["Long", "Short"] },
+  bias: { label: "Bias", folder: "Bias", multi: false, defaults: ["Bullish", "Bearish", "Range"] },
+  psychologyTrackers: { label: "Psychology Tracker", folder: "Psychology Tracker", multi: true, defaults: [] },
 };
 
 const DEFAULT_SETTINGS = {
@@ -38,24 +40,26 @@ const DEFAULT_SETTINGS = {
   dashboardAccount: "",
   tableFontSize: "12",
   columns: [
-    "Status", "Account", "Model", "Symbol", "Position",
-    "Entry / Exit Date", "News Impact", "Bias", "Market Conditions",
+    "Status", "Account", "Strategy", "Symbol", "Position",
+    "Session", "Entry Date", "Exit Date",
+    "News Impact", "Bias", "Market Conditions",
     "Type of Trade", "Entry TimeFrame", "Confluences", "Key Levels",
     "Entry Signal", "Order Type", "S/L Pips", "% Risk",
-    "SL Management", "Max RR reached", "Actual RR achieved",
+    "SL Management", "Actual RR achieved", "Max RR reached",
     "TP Management", "Gross PnL", "Fees", "Net PnL",
     "Setup Grade", "Mistakes", "No Explanation?",
-    "Bias Review", "Entry Performance", "Psychology Tracker",
-    "Weekly Report"
+    "Weekly Report",
+    "Bias Review", "Psychology Tracker"
   ],
   templateYaml: [
     '"Status": "Open / Closed"',
     '"Account": ""',
-    '"Model": ""',
+    '"Strategy": ""',
     '"Symbol": ""',
     '"Position": "Long / Short"',
-    '"Entry / Exit Date": "{{date}}"',
-    '"Entry / Exit Date (end)": null',
+    '"Session": ""',
+    '"Entry Date": "{{date}}"',
+    '"Exit Date": null',
     '"News Impact": ""',
     '"Bias": ""',
     '"Market Conditions": ""',
@@ -68,8 +72,8 @@ const DEFAULT_SETTINGS = {
     '"S/L Pips": 0',
     '"% Risk": 0',
     '"SL Management": ""',
-    '"Max RR reached": 0',
     '"Actual RR achieved": ""',
+    '"Max RR reached": 0',
     '"TP Management": ""',
     '"Gross PnL": 0',
     '"Fees": 0',
@@ -77,10 +81,9 @@ const DEFAULT_SETTINGS = {
     '"Setup Grade": ""',
     '"Mistakes": []',
     '"No Explanation?": false',
-    '"Bias Review": ""',
-    '"Entry Performance": ""',
-    '"Psychology Tracker": ""',
     '"Weekly Report": ""',
+    '"Bias Review": ""',
+    '"Psychology Tracker": []',
   ],
   templateChecklists: {
     preTrade: [],
@@ -640,12 +643,13 @@ class DatabaseView extends ItemView {
       const tradeNum = parseInt(file.basename.match(/\d+/)?.[0]) || 0;
       const grossPnl = fm["Gross PnL"] !== undefined ? fm["Gross PnL"] : null;
       const fees = fm.Fees !== undefined ? fm.Fees : 0;
-      const dateStr = fm["Entry / Exit Date"] || "";
+      const dateStr = fm["Entry Date"] || fm["Entry / Exit Date"] || "";
       const dateStart = dateStr ? new Date(dateStr) : null;
-      const dateEnd = fm["Entry / Exit Date (end)"] ? new Date(fm["Entry / Exit Date (end)"]) : dateStart;
+      const dateEnd = (fm["Exit Date"] || fm["Entry / Exit Date (end)"]) ? new Date(fm["Exit Date"] || fm["Entry / Exit Date (end)"]) : dateStart;
       const maxRr = fm["Max RR reached"] !== undefined ? fm["Max RR reached"] : null;
-      const actualRr = fm["Actual RR achieved: W(+1), L(-1), BE(0)"] !== undefined ? fm["Actual RR achieved: W(+1), L(-1), BE(0)"] : null;
+      const actualRr = fm["Actual RR achieved"] !== undefined ? fm["Actual RR achieved"] : (fm["Actual RR achieved: W(+1), L(-1), BE(0)"] !== undefined ? fm["Actual RR achieved: W(+1), L(-1), BE(0)"] : null);
       const slPips = fm["S/L Pips"] !== undefined ? fm["S/L Pips"] : null;
+      const percentRisk = fm["% Risk"] !== undefined ? fm["% Risk"] : null;
 
       const netPnl = grossPnl !== null && grossPnl !== undefined ? grossPnl - fees : null;
       const outcome = this.computeOutcome(grossPnl, fees, maxRr, actualRr);
@@ -663,8 +667,9 @@ class DatabaseView extends ItemView {
         isBacktest,
         frontmatter: fm,
         date: dateStr,
+        exitDate: fm["Exit Date"] || fm["Entry / Exit Date (end)"] || "",
         symbol: fm.Symbol ? this.stripWiki(fm.Symbol) : "",
-        model: fm.Model ? this.stripWiki(fm.Model) : "",
+        strategy: (fm.Strategy || fm.Model) ? this.stripWiki(fm.Strategy || fm.Model) : "",
         direction: fm.Position || "",
         status: fm.Status || "",
         pnl: grossPnl,
@@ -676,10 +681,17 @@ class DatabaseView extends ItemView {
         tradeType: fm["Type of Trade"] ? this.stripWiki(fm["Type of Trade"]) : "",
         orderType: fm["Order Type"] ? this.stripWiki(fm["Order Type"]) : "",
         entrySignal: this.parseListStr(fm["Entry Signal"]),
+        entryTimeframe: fm["Entry TimeFrame"] ? this.stripWiki(fm["Entry TimeFrame"]) : "",
         marketConditions: fm["Market Conditions"] ? this.stripWiki(fm["Market Conditions"]) : "",
         slManagement: fm["SL Management"] ? this.stripWiki(fm["SL Management"]) : "",
         tpManagement: fm["TP Management"] ? this.stripWiki(fm["TP Management"]) : "",
         newsImpact: fm["News Impact"] ? this.stripWiki(fm["News Impact"]) : "",
+        bias: fm.Bias ? this.stripWiki(fm.Bias) : "",
+        noExplanation: fm["No Explanation?"] === true,
+        biasReview: fm["Bias Review"] ? this.stripWiki(fm["Bias Review"]) : "",
+        psychologyTracker: this.parseList(fm["Psychology Tracker"]),
+        psychologyTrackerStr: this.parseListStr(fm["Psychology Tracker"]),
+        weeklyReport: fm["Weekly Report"] ? this.stripWiki(fm["Weekly Report"]) : "",
         mistakes: this.parseList(fm.Mistakes),
         confluences: this.parseList(fm.Confluences),
         keyLevels: this.parseList(fm["Key Levels"]),
@@ -696,6 +708,7 @@ class DatabaseView extends ItemView {
         maxRr,
         actualRr,
         slPips,
+        percentRisk,
       });
     }
   }
@@ -741,7 +754,7 @@ class DatabaseView extends ItemView {
       list = list.filter(
         (t) =>
           t.symbol.toLowerCase().includes(term) ||
-          t.model.toLowerCase().includes(term) ||
+          t.strategy.toLowerCase().includes(term) ||
           t.direction.toLowerCase().includes(term)
       );
     }
@@ -757,7 +770,7 @@ class DatabaseView extends ItemView {
     if (this.sortKey) {
       const sortCols = {
         symbol: "symbols", direction: "positions", session: "sessions",
-        account: "accounts", model: "models", tradeType: "typesOfTrade",
+        account: "accounts", strategy: "models", tradeType: "typesOfTrade",
         setupGrade: "setupGrades", orderType: "orderTypes",
         entrySignal: "entrySignals", marketConditions: "marketConditions",
         slManagement: "slManagement", tpManagement: "tpManagement",
@@ -803,7 +816,7 @@ class DatabaseView extends ItemView {
 
     const search = bar.createEl("input", {
       cls: "tj-search",
-      attr: { type: "text", placeholder: "Search symbol, model..." },
+      attr: { type: "text", placeholder: "Search symbol, strategy..." },
     });
     search.value = this.searchTerm;
     search.addEventListener("input", () => {
@@ -822,13 +835,13 @@ class DatabaseView extends ItemView {
       });
     }
 
-    const models = [...new Set(this.trades.map((t) => t.model).filter(Boolean))].sort();
-    if (models.length > 0) {
+    const strategies = [...new Set(this.trades.map((t) => t.strategy).filter(Boolean))].sort();
+    if (strategies.length > 0) {
       const sel = bar.createEl("select", { cls: "tj-filter-select" });
-      sel.createEl("option", { text: "All Models", value: "" });
-      models.forEach((m) => sel.createEl("option", { text: m, value: m }));
+      sel.createEl("option", { text: "All Strategies", value: "" });
+      strategies.forEach((s) => sel.createEl("option", { text: s, value: s }));
       sel.addEventListener("change", () => {
-        this.filters.model = sel.value;
+        this.filters.strategy = sel.value;
         this.render();
       });
     }
@@ -904,7 +917,7 @@ class DatabaseView extends ItemView {
       cols.forEach((col) => {
         const key = this.colKey(col);
         const td = row.createEl("td", { cls: "tj-td" });
-        if (col === "Entry / Exit Date" || col === "Entry / Exit Date (end)") td.addClass("tj-date-cell");
+        if (col === "Entry Date" || col === "Exit Date") td.addClass("tj-date-cell");
 
         const val = this.getCellValue(trade, col);
         const isNumeric = typeof val === "number";
@@ -919,11 +932,13 @@ class DatabaseView extends ItemView {
 
         td.addEventListener("click", (e) => {
           e.stopPropagation();
-          const editable = ["Status", "Account", "Model", "Symbol", "Position",
-            "News Impact", "Bias", "Market Conditions", "Type of Trade",
+          const editable = ["Status", "Account", "Strategy", "Symbol", "Position",
+            "Session", "News Impact", "Bias", "Market Conditions", "Type of Trade",
             "Entry TimeFrame", "Confluences", "Key Levels", "Entry Signal",
-            "Order Type", "SL Management", "TP Management", "Setup Grade",
-            "Mistakes", "No Explanation?", "Bias Review"];
+            "Order Type", "S/L Pips", "% Risk", "SL Management",
+            "Actual RR achieved", "Max RR reached", "TP Management",
+            "Gross PnL", "Fees", "Net PnL", "Setup Grade",
+            "Mistakes", "Psychology Tracker", "Bias Review"];
           if (editable.includes(col)) {
             this.openTradePanel(trade, col);
           }
@@ -981,9 +996,10 @@ class DatabaseView extends ItemView {
   colKey(col) {
     const map = {
       Trade: "name",
-      "Entry / Exit Date": "date",
+      "Entry Date": "date",
+      "Exit Date": "exitDate",
       Symbol: "symbol",
-      Model: "model",
+      Strategy: "strategy",
       Status: "status",
       "Gross PnL": "pnl",
       "Net PnL": "netPnl",
@@ -1015,10 +1031,12 @@ class DatabaseView extends ItemView {
     switch (col) {
       case "Status": return trade.status;
       case "Account": return trade.account;
-      case "Model": return trade.model;
+      case "Strategy": return trade.strategy;
       case "Symbol": return trade.symbol;
       case "Position": return trade.direction;
-      case "Entry / Exit Date": return trade.date;
+      case "Session": return trade.session || "";
+      case "Entry Date": return trade.date;
+      case "Exit Date": return trade.exitDate || "";
       case "News Impact": return trade.newsImpact || "";
       case "Bias": return trade.bias || "";
       case "Market Conditions": return trade.marketConditions || "";
@@ -1032,7 +1050,7 @@ class DatabaseView extends ItemView {
       case "% Risk": return trade.percentRisk !== null ? trade.percentRisk : "";
       case "SL Management": return trade.slManagement || "";
       case "Max RR reached": return trade.maxRr !== null ? trade.maxRr : "";
-      case "Actual RR achieved": return trade.actualRr || "";
+      case "Actual RR achieved": return trade.actualRr !== null && trade.actualRr !== undefined ? trade.actualRr : "";
       case "TP Management": return trade.tpManagement || "";
       case "Gross PnL": return trade.pnl;
       case "Fees": return trade.fees !== null ? trade.fees : "";
@@ -1041,8 +1059,7 @@ class DatabaseView extends ItemView {
       case "Mistakes": return trade.mistakesStr;
       case "No Explanation?": return trade.noExplanation ? "Yes" : "No";
       case "Bias Review": return trade.biasReview || "";
-      case "Entry Performance": return trade.entryPerformance || "";
-      case "Psychology Tracker": return trade.psychologyTracker || "";
+      case "Psychology Tracker": return trade.psychologyTrackerStr;
       case "Weekly Report": return trade.weeklyReport || "";
       default: {
         const fm = trade.frontmatter;
@@ -1061,14 +1078,15 @@ class DatabaseView extends ItemView {
       ];
     }
     const map = {
-      Account: "accounts", Model: "models", Symbol: "symbols",
-      Position: "positions",
+      Account: "accounts", Strategy: "models", Symbol: "symbols",
+      Position: "positions", Session: "sessions",
       "Entry TimeFrame": "entryTimeframes",
       "Entry Signal": "entrySignals", "Market Conditions": "marketConditions",
       "SL Management": "slManagement", "TP Management": "tpManagement",
       "News Impact": "newsImpact", "Type of Trade": "typesOfTrade",
       "Order Type": "orderTypes", "Setup Grade": "setupGrades",
       Confluences: "confluences", "Key Levels": "keyLevels", Mistakes: "mistakes",
+      Bias: "bias", "Psychology Tracker": "psychologyTrackers",
     };
     const cat = map[col];
     if (!cat) return null;
@@ -1076,7 +1094,7 @@ class DatabaseView extends ItemView {
   }
 
   isMultiColumn(col) {
-    const map = { Confluences: "confluences", "Key Levels": "keyLevels", Mistakes: "mistakes" };
+    const map = { Confluences: "confluences", "Key Levels": "keyLevels", Mistakes: "mistakes", "Psychology Tracker": "psychologyTrackers" };
     const cat = map[col];
     return cat ? (SETUP_CATEGORIES[cat]?.multi || false) : false;
   }
@@ -1124,13 +1142,20 @@ class DatabaseView extends ItemView {
     closeExistingModals();
     this.cleanupEditor();
 
-    const editableCols = ["Status", "Account", "Model", "Symbol", "Position",
+    const editableCols = [
+      "Status", "Account", "Strategy", "Symbol", "Position",
+      "Session", "Entry Date", "Exit Date",
       "News Impact", "Bias", "Market Conditions", "Type of Trade",
       "Entry TimeFrame", "Confluences", "Key Levels", "Entry Signal",
-      "Order Type", "SL Management", "TP Management", "Setup Grade",
-      "Mistakes", "No Explanation?", "Bias Review"];
+      "Order Type", "S/L Pips", "% Risk", "SL Management",
+      "Actual RR achieved", "Max RR reached", "TP Management",
+      "Gross PnL", "Fees", "Net PnL", "Setup Grade",
+      "Mistakes", "Psychology Tracker", "Weekly Report"
+    ];
 
-    const pending = {};
+const pending = {};
+    const numericCols = ["S/L Pips", "% Risk", "Max RR reached", "Actual RR achieved", "Gross PnL", "Fees", "Net PnL"];
+    const isNumericCol = (c) => numericCols.includes(c);
 
     const backdrop = document.body.createEl("div", { cls: "tj-trade-backdrop" });
     const panel = document.body.createEl("div", { cls: "tj-trade-panel" });
@@ -1159,11 +1184,8 @@ class DatabaseView extends ItemView {
         if (old) { old.remove(); activeEditors.delete(row); return; }
 
         const options = await this.getSetupOptions(col);
-        if (!options || options.length === 0) return;
-
         const isMulti = this.isMultiColumn(col);
         const displayVal = pending[col] !== undefined ? pending[col] : current;
-        let selected = isMulti ? displayVal.split(",").map((s) => s.trim()).filter(Boolean) : [];
 
         const editor = row.createEl("div", { cls: "tj-panel-editor" });
         activeEditors.add(row);
@@ -1185,6 +1207,33 @@ class DatabaseView extends ItemView {
           activeEditors.delete(row);
           row.removeClass("tj-panel-row-open");
         };
+
+        if (!options || options.length === 0) {
+          const input = editor.createEl("input", {
+            cls: "tj-panel-input",
+            attr: { type: isNumericCol(col) ? "number" : "text", value: displayVal || "", placeholder: col }
+          });
+          const commit = () => {
+            const v = input.value.trim();
+            if (isNumericCol(col) && v !== "") {
+              const n = parseFloat(String(v).replace(",", "."));
+              selectVal(isNaN(n) ? v : n);
+            } else {
+              selectVal(v);
+            }
+            confirmEdit();
+          };
+          input.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") { e.preventDefault(); commit(); }
+            else if (e.key === "Escape") { e.stopPropagation(); cancelEdit(); }
+          });
+          input.addEventListener("blur", () => { if (activeEditors.has(row)) commit(); });
+          input.focus();
+          input.select();
+          return;
+        }
+
+        let selected = isMulti ? displayVal.split(",").map((s) => s.trim()).filter(Boolean) : [];
 
         const linkResults = await Promise.all(options.map((o) => this.getOptionWikilinks(o.path)));
 
@@ -1237,15 +1286,32 @@ class DatabaseView extends ItemView {
     saveBtn.addEventListener("click", async () => {
       const fm = { ...trade.frontmatter };
       for (const [col, val] of Object.entries(pending)) {
-        const key = this.yamlKey(col);
+        let key = this.yamlKey(col);
+        if (col === "Strategy" && fm.Model !== undefined && fm.Strategy === undefined) {
+          delete fm.Model;
+        }
+        if (col === "Entry Date") {
+          if (fm["Entry / Exit Date"] !== undefined && fm["Entry Date"] === undefined) {
+            delete fm["Entry / Exit Date"];
+          }
+        }
+        if (col === "Exit Date") {
+          if (fm["Entry / Exit Date (end)"] !== undefined && fm["Exit Date"] === undefined) {
+            delete fm["Entry / Exit Date (end)"];
+          }
+        }
         const isMulti = this.isMultiColumn(col);
         if (isMulti) fm[key] = val.split(",").map((s) => s.trim()).filter(Boolean);
-        else fm[key] = val;
+        else if (isNumericCol(col) && typeof val === "string") {
+          const n = parseFloat(String(val).replace(",", "."));
+          fm[key] = isNaN(n) ? (val.trim() === "" ? 0 : val) : n;
+        } else fm[key] = val;
       }
       await this.writeFrontmatter(trade.file, fm);
       await this.waitForMetadata(trade.file);
       await this.updateSetupBacklinks(trade, pending);
       closePanel();
+      await this.render();
     });
 
     if (focusRow) setTimeout(() => focusRow.scrollIntoView({ block: "start" }), 50);
@@ -1324,7 +1390,16 @@ class DatabaseView extends ItemView {
 
     const mergedFm = { ...trade.frontmatter };
     for (const [col, val] of Object.entries(pending)) {
-      const key = this.yamlKey(col);
+      let key = this.yamlKey(col);
+      if (col === "Strategy" && mergedFm.Model !== undefined && mergedFm.Strategy === undefined) {
+        delete mergedFm.Model;
+      }
+      if (col === "Entry Date" && mergedFm["Entry / Exit Date"] !== undefined && mergedFm["Entry Date"] === undefined) {
+        delete mergedFm["Entry / Exit Date"];
+      }
+      if (col === "Exit Date" && mergedFm["Entry / Exit Date (end)"] !== undefined && mergedFm["Exit Date"] === undefined) {
+        delete mergedFm["Entry / Exit Date (end)"];
+      }
       if (this.isMultiColumn(col)) {
         mergedFm[key] = val.split(",").map((s) => s.trim()).filter(Boolean);
       } else {
@@ -1336,16 +1411,19 @@ class DatabaseView extends ItemView {
     const newPaths = new Set();
     const colCache = {};
 
-    for (const col of ["Account", "Model", "Session", "Symbol",
+    for (const col of ["Account", "Strategy", "Model", "Session", "Symbol",
       "Entry TimeFrame", "Entry Signal", "Market Conditions", "SL Management", "TP Management",
       "News Impact", "Type of Trade", "Order Type", "Setup Grade", "Confluences", "Key Levels", "Mistakes"]) {
       const items = await this.getSetupOptions(col);
       if (!items) continue;
       colCache[col] = items;
 
-      const key = this.yamlKey(col);
+      const keys = col === "Strategy" ? ["Strategy", "Model"] : [this.yamlKey(col)];
       const resolvePaths = (fm) => {
-        let raw = fm[key];
+        let raw = null;
+        for (const k of keys) {
+          if (fm[k] !== undefined && fm[k] !== null) { raw = fm[k]; break; }
+        }
         let values = [];
         if (Array.isArray(raw)) values = raw.map((v) => this.stripWiki(String(v))).filter(Boolean);
         else if (raw) values = [this.stripWiki(String(raw))];
@@ -1441,7 +1519,7 @@ class DatabaseView extends ItemView {
     this.renderDrawdownChart(chartRow, closed);
     this.renderPerformanceChart(chartRow, closed);
 
-    this.renderGroupBreakdown(dash, "PnL by Model", closed, "model");
+    this.renderGroupBreakdown(dash, "PnL by Strategy", closed, "strategy");
     this.renderGroupBreakdown(dash, "PnL by Symbol", closed, "symbol");
     this.renderGroupBreakdown(dash, "PnL by Session", closed, "session");
     this.renderGroupBreakdown(dash, "PnL by Timeframe", closed, "entryTimeframe");
@@ -1660,7 +1738,7 @@ class GuideModal {
         title: "Creating Trades",
         content: [
           "Click '+ New Trade' to create a live trade, or '+ New Backtest' for backtesting.",
-          "Fill in the YAML properties at the top of the file (Position, Symbol, Model, etc.).",
+          "Fill in the YAML properties at the top of the file (Position, Symbol, Strategy, etc.).",
           "The trade is auto-linked to your Trading Settings folders."
         ]
       },
@@ -1669,7 +1747,7 @@ class GuideModal {
         content: [
           "Status: Open (in progress) or Closed (finished).",
           "Gross PnL / Net PnL: Fill after closing the trade.",
-          "Model, Account, Session: Must match names in Trading Settings folders.",
+          "Strategy, Account, Session: Must match names in Trading Settings folders.",
           "Setup Grade: A/B/C/D rating for the trade quality."
         ]
       },
@@ -1721,10 +1799,47 @@ class GuideModal {
       {
         title: "Settings",
         content: [
-          "Click 'Settings' tab to manage Accounts, Models, Sessions, Symbols.",
+          "Click 'Settings' tab to manage Accounts, Strategies, Sessions, Symbols.",
           "Configure your Checklist Templates for new trades.",
           "Create folders first before creating trades.",
           "Folder paths must contain 'Trading Settings'."
+        ]
+      },
+      {
+        title: "Property Explanations",
+        content: [
+          "Status: Open (trade still running) or Closed (finished).",
+          "Account: Which account/broker the trade was taken on.",
+          "Strategy: The trading model/strategy you used for this trade.",
+          "Symbol: The instrument traded.",
+          "Position: Long or Short.",
+          "Session: Which trading session the trade happened in.",
+          "Entry Date: When the trade was opened.",
+          "Exit Date: When the trade was closed.",
+          "News Impact: High/Medium/Low — how much news influenced the setup.",
+          "Bias: Your directional view before entering.",
+          "Market Conditions: The market context at entry.",
+          "Type of Trade: Scalping, Day Trade, Swing, etc.",
+          "Entry TimeFrame: The timeframe used for your entry signal.",
+          "Confluences: Multiple factors agreeing with the setup.",
+          "Key Levels: Important price levels involved.",
+          "Entry Signal: The specific trigger that got you in.",
+          "Order Type: Limit, Market, or Stop order.",
+          "S/L Pips: Distance to stop loss in pips.",
+          "% Risk: Percentage of account risked on this trade.",
+          "SL Management: How the stop loss was managed.",
+          "Actual RR achieved: W(+1) win, L(-1) loss, BE(0) break-even — fill honestly.",
+          "Max RR reached: Best risk:reward the trade hit while open.",
+          "TP Management: How take-profit was handled.",
+          "Gross PnL: Profit/loss before fees.",
+          "Fees: Costs charged on this trade.",
+          "Net PnL: Gross PnL minus fees — the real result.",
+          "Setup Grade: A+ / A / B / C / F — quality of the setup.",
+          "Mistakes: What you did wrong during this trade.",
+          "No Explanation?: Mark true if you have no lessons to write.",
+          "Weekly Report: Free text — set by your weekly review, not auto-filled.",
+          "Bias Review: Optional review field — did your original bias play out? You fill this in.",
+          "Psychology Tracker: Multi-select review fields — pick from the Psychology Tracker list, or type any keywords. You fill this in."
         ]
       }
     ];
@@ -2008,7 +2123,9 @@ class SettingsModal {
 
   renderSimpleList(sec, key, items) {
     const addRow = sec.createEl("div", { cls: "tj-setup-add-row" });
-    const input = addRow.createEl("input", { cls: "tj-sm-input", attr: { type: "text", placeholder: `Add ${SETUP_CATEGORIES[key].label.slice(0, -1)}...` } });
+    const label = SETUP_CATEGORIES[key].label;
+    const singular = label.endsWith("ies") ? label.slice(0, -3) + "y" : label.slice(0, -1);
+    const input = addRow.createEl("input", { cls: "tj-sm-input", attr: { type: "text", placeholder: `Add ${singular}...` } });
     const addBtn = addRow.createEl("button", { text: "Add", cls: "tj-btn tj-btn-sm tj-btn-primary" });
 
     const list = sec.createEl("ul", { cls: "tj-setup-list" });
@@ -2128,7 +2245,7 @@ class TradeRythmSettingsTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Setup folder")
-      .setDesc("Vault-relative path to Trading Settings (Accounts, Models, Sessions, etc.)")
+      .setDesc("Vault-relative path to Trading Settings (Accounts, Strategies, Sessions, etc.)")
       .addText((text) =>
         text
           .setValue(this.plugin.settings.setupFolder)
@@ -2203,5 +2320,6 @@ class TradeRythmSettingsTab extends PluginSettingTab {
 // ─── Module Export ──────────────────────────────────────
 module.exports = TradeRythmPlugin;
 
+/* nosourcemap */
 /* nosourcemap */
 /* nosourcemap */

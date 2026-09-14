@@ -617,6 +617,13 @@
 .tj-glass-modal.tj-guide-glass {
   background: rgba(30, 30, 40, 0.1);
 }
+.tj-glass-modal.tj-guide-glass ul {
+  padding-left: 20px;
+}
+.tj-glass-modal.tj-guide-glass li {
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
 
 /* ── Light Mode Glass Modals ─────────────────────── */
 .theme-light .tj-glass-modal {
