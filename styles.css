@@ -779,15 +779,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.tj-dd-links {
-  font-size: 10px;
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
-  margin-top: 1px;
-}
 .tj-dd-done {
   width: 100%;
   border-radius: 0 0 10px 10px;

@@ -8,6 +8,12 @@ const { Plugin, ItemView, PluginSettingTab, Setting, Notice, Modal } = require("
 
 const VIEW_TYPE = "trade-rythm-db";
 
+const MONEY_COLS = ["Gross PnL", "Fees", "Net PnL"];
+const isMoneyCol = (c) => MONEY_COLS.includes(c);
+const numericCols = ["S/L Pips", "% Risk", "Max RR reached", "Actual RR achieved", "Gross PnL", "Fees", "Net PnL"];
+const isNumericCol = (c) => numericCols.includes(c);
+const fmtMoney = (v) => (v === null || v === undefined ? "" : (typeof v === "number" ? v.toFixed(2) : String(v).replace(",", ".")));
+
 // ─── Settings ───────────────────────────────────────────
 const SETUP_CATEGORIES = {
   accounts: { label: "Accounts", folder: "Accounts", hasYaml: true, multi: false, defaults: [] },
@@ -401,7 +407,7 @@ class TradeRythmPlugin extends Plugin {
         if (val === "true") val = true;
         else if (val === "false") val = false;
         else if (val === "null") val = null;
-        else if (!isNaN(val) && val !== "") val = Number(val);
+        else if (!isMoneyCol(key) && !isNaN(val) && val !== "") val = Number(val);
         fm[key] = val;
       }
       return fm;
@@ -418,8 +424,8 @@ class DatabaseView extends ItemView {
     this.plugin = plugin;
     this.trades = [];
     this.filteredTrades = [];
-    this.sortKey = null;
-    this.sortAsc = true;
+    this.sortKey = "name";
+    this.sortAsc = false;
     this.filters = {};
     this.searchTerm = "";
     this.activeTab = "trades";
@@ -1052,9 +1058,9 @@ class DatabaseView extends ItemView {
       case "Max RR reached": return trade.maxRr !== null ? trade.maxRr : "";
       case "Actual RR achieved": return trade.actualRr !== null && trade.actualRr !== undefined ? trade.actualRr : "";
       case "TP Management": return trade.tpManagement || "";
-      case "Gross PnL": return trade.pnl;
-      case "Fees": return trade.fees !== null ? trade.fees : "";
-      case "Net PnL": return trade.netPnl;
+      case "Gross PnL": return fmtMoney(trade.pnl);
+      case "Fees": return fmtMoney(trade.fees);
+      case "Net PnL": return fmtMoney(trade.netPnl);
       case "Setup Grade": return trade.setupGrade;
       case "Mistakes": return trade.mistakesStr;
       case "No Explanation?": return trade.noExplanation ? "Yes" : "No";
@@ -1118,26 +1124,6 @@ class DatabaseView extends ItemView {
     this._ed = null;
   }
 
-  async getOptionWikilinks(filePath) {
-    if (this._wikilinkCache?.[filePath]) return this._wikilinkCache[filePath];
-    try {
-      const content = await this.app.vault.adapter.read(filePath);
-      const links = [];
-      const re = /\[\[([^\]]+)\]\]/g;
-      let m;
-      while ((m = re.exec(content)) !== null) {
-        const link = m[1].split("|")[0].trim();
-        if (!links.includes(link)) links.push(link);
-      }
-      const str = links.length > 0 ? links.join(", ") : "";
-      if (!this._wikilinkCache) this._wikilinkCache = {};
-      this._wikilinkCache[filePath] = str;
-      return str;
-    } catch {
-      return "";
-    }
-  }
-
   async openTradePanel(trade, focusCol) {
     closeExistingModals();
     this.cleanupEditor();
@@ -1154,8 +1140,6 @@ class DatabaseView extends ItemView {
     ];
 
 const pending = {};
-    const numericCols = ["S/L Pips", "% Risk", "Max RR reached", "Actual RR achieved", "Gross PnL", "Fees", "Net PnL"];
-    const isNumericCol = (c) => numericCols.includes(c);
 
     const backdrop = document.body.createEl("div", { cls: "tj-trade-backdrop" });
     const panel = document.body.createEl("div", { cls: "tj-trade-panel" });
@@ -1215,7 +1199,7 @@ const pending = {};
           });
           const commit = () => {
             const v = input.value.trim();
-            if (isNumericCol(col) && v !== "") {
+            if (isNumericCol(col) && !isMoneyCol(col) && v !== "") {
               const n = parseFloat(String(v).replace(",", "."));
               selectVal(isNaN(n) ? v : n);
             } else {
@@ -1235,16 +1219,12 @@ const pending = {};
 
         let selected = isMulti ? displayVal.split(",").map((s) => s.trim()).filter(Boolean) : [];
 
-        const linkResults = await Promise.all(options.map((o) => this.getOptionWikilinks(o.path)));
-
         options.forEach((o, i) => {
           const item = editor.createEl("div", { cls: "tj-dd-item" });
           const isSel = isMulti ? selected.includes(o.name) : (o.name === displayVal);
           item.createEl("span", { text: isSel ? "☑ " : "☐ ", cls: "tj-dd-check" });
           const tw = item.createEl("span", { cls: "tj-dd-name", text: o.name });
           if (isSel) item.addClass("tj-dd-selected");
-          const links = linkResults[i];
-          if (links) item.createEl("span", { cls: "tj-dd-links", text: links });
 
           item.addEventListener("mousedown", (e) => {
             e.preventDefault();
@@ -1302,7 +1282,7 @@ const pending = {};
         }
         const isMulti = this.isMultiColumn(col);
         if (isMulti) fm[key] = val.split(",").map((s) => s.trim()).filter(Boolean);
-        else if (isNumericCol(col) && typeof val === "string") {
+        else if (isNumericCol(col) && !isMoneyCol(col) && typeof val === "string") {
           const n = parseFloat(String(val).replace(",", "."));
           fm[key] = isNaN(n) ? (val.trim() === "" ? 0 : val) : n;
         } else fm[key] = val;
@@ -2320,6 +2300,7 @@ class TradeRythmSettingsTab extends PluginSettingTab {
 // ─── Module Export ──────────────────────────────────────
 module.exports = TradeRythmPlugin;
 
+/* nosourcemap */
 /* nosourcemap */
 /* nosourcemap */
 /* nosourcemap */
